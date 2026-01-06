@@ -557,47 +557,6 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
     # --------------------------------------------------------------------------
     # BƯỚC 3: TÍNH GO (SAU KHI ME ĐÃ DI CHUYỂN)
     # --------------------------------------------------------------------------
-    def run_step_2_calculate_go(self, mandibleNode, nodeMe, nodeCoR, nodeCoL, nodeGoR, nodeGoL, target_angle_deg=127.0):
-        if self.msp_origin is None: raise ValueError("Chưa có MSP.")
-        
-        # Tự động chọn xương để tính toán giao điểm
-        # Ưu tiên Mandible_Body (đã cắt genio) nếu có, nếu không dùng xương gốc
-        bone_to_calc = mandibleNode
-        bodyNode = slicer.util.getNode("Mandible_Body")
-        if bodyNode:
-            print("Đang tính toán trên 'Mandible_Body'...")
-            bone_to_calc = bodyNode
-        
-        pMe = self.get_pos(nodeMe) # Lấy toạ độ Me (đã bị trượt)
-        pCoR = self.get_pos(nodeCoR)
-        pCoL = self.get_pos(nodeCoL)
-        pGoR_old=self.get_pos(nodeGoR)
-        pGoL_old=self.get_pos(nodeGoL)
-
-        mand_pd = self.ensure_normals(bone_to_calc.GetPolyData())
-        results = {}
-
-        if pCoR is not None:
-            try:
-                goR = self.pick_gonion_outer(pMe, pCoR, mand_pd, self.msp_origin, self.msp_normal, 'R', target_angle_deg)
-                self.create_fiducial_node("GoR_N", goR, color=(0,1,0))
-                results['R_old'] = self.calculate_angle_deg(pCoR, pGoR_old, pMe)
-                results['R_new'] = self.calculate_angle_deg(pCoR, goR, pMe)
-                self.create_angle_node("Angle_CoR_GoR_Me", pCoR, pGoR_old, pMe)
-                self.create_angle_node("Angle_CoR_GoR_N_Me", pCoR, goR, pMe)
-            except Exception as e: print(f"Lỗi GoR: {e}")
-
-        if pCoL is not None:
-            try:
-                goL = self.pick_gonion_outer(pMe, pCoL, mand_pd, self.msp_origin, self.msp_normal, 'L', target_angle_deg)
-                self.create_fiducial_node("GoL_N", goL, color=(0,1,0))
-                results['L_old'] = self.calculate_angle_deg(pCoL, pGoL_old, pMe)
-                results['L_new'] = self.calculate_angle_deg(pCoL, goL, pMe)
-                self.create_angle_node("Angle_CoL_GoL_Me", pCoL, pGoL_old, pMe)
-                self.create_angle_node("Angle_CoL_GoL_N_Me", pCoL, goL, pMe)
-            except Exception as e: print(f"Lỗi GoL: {e}")
-
-        return results
 
     def pick_gonion_outer(self, Me, Co, mand_pd, O_msp, N_msp, side_label, target_angle_deg, ratio=2.0):
         # Code cũ giữ nguyên logic toán học
@@ -1223,7 +1182,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
                 goL = self.pick_gonion_outer(pMe, pCoL, mand_pd, self.msp_origin, self.msp_normal, 'L', target_angle_deg, ratio=2.0)
                 self.create_fiducial_node("GoL_N", goL, color=(0,1,0))
                 results['L'] = self.calculate_angle_deg(pCoL, goL, pMe)
-                self.create_angle_node("Angle_CoL_GoL_Me", pCoR, pGoL_old, pMe)
+                self.create_angle_node("Angle_CoL_GoL_Me", pCoL, pGoL_old, pMe)
                 self.create_angle_node("Angle_CoL_GoL_N_Me", pCoL, goL, pMe)
             except Exception as e: print(f"Lỗi GoL: {e}")
 
