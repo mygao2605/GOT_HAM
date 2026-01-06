@@ -385,9 +385,26 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def onStep4(self):
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-            # Tạo guide trên Mandible_Body
-            self.logic.run_step_4_create_guides_robust() 
-            qt.QMessageBox.information(None, "Xong", "Đã tạo máng hướng dẫn (Band Guide).")
+            
+            # Thiết lập thư mục lưu mặc định trên Desktop/test
+            desktop = os.path.join(os.path.expanduser("~"), "Desktop", "test")
+            if not os.path.exists(desktop):
+                os.makedirs(desktop)
+
+            # Gọi logic tạo máng với các thông số bạn yêu cầu
+            params = {
+                "clearance": 0.2,
+                "thickness": 1.2,
+                "height": 15.0,
+                "output_folder": desktop
+            }
+            
+            self.logic.run_step_5_create_fragment_guides(params)
+            
+            # Tự động mở thư mục để xem file STL
+            os.startfile(desktop)
+            qt.QMessageBox.information(None, "Xong", f"Đã tạo máng và xuất STL vào:\n{desktop}")
+            
         except Exception as e:
             qt.QMessageBox.critical(None, "Lỗi B5", str(e))
         finally:
@@ -674,13 +691,43 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         conn = vtk.vtkPolyDataConnectivityFilter(); conn.SetInputConnection(clean.GetOutputPort()); conn.SetExtractionModeToLargestRegion(); conn.Update()
         self.create_model_node(guideName, conn.GetOutput(), color=(0.6, 1.0, 0.6), opacity=1.0)
 
+    # --------------------------------------------------------------------------
+    # BƯỚC 6: XUẤT TẤT CẢ DỮ LIỆU SANG STL (CẬP NHẬT)
+    # --------------------------------------------------------------------------
     def run_step_5_export(self, folder):
-        nodes = ["bone_1", "bone_2", "mandible_final"]
+        """
+        Xuất các mảnh xương và máng hướng dẫn ra thư mục chỉ định.
+        """
+        # Danh sách các node quan trọng cần xuất
+        nodes = [
+            "bone_1",           # Mảnh xương gọt phải
+            "bone_2",           # Mảnh xương gọt trái
+            "Guide_bone_1",     # Máng hướng dẫn phải
+            "Guide_bone_2"      # Máng hướng dẫn trái
+        ]
+        
+        count = 0
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+        print(f"--- Đang bắt đầu xuất STL vào: {folder} ---")
+        
         for name in nodes:
             try:
                 node = slicer.util.getNode(name)
-                slicer.util.saveNode(node, os.path.join(folder, name + ".stl"))
-            except: pass
+                if node:
+                    file_path = os.path.join(folder, f"{name}.stl")
+                    # Lưu node dưới dạng STL
+                    success = slicer.util.saveNode(node, file_path)
+                    if success:
+                        print(f"✅ Đã xuất: {file_path}")
+                        count += 1
+            except Exception as e:
+                # Bỏ qua nếu không tìm thấy node (người dùng chưa chạy bước đó)
+                pass
+        
+        print(f"--- Hoàn tất! Đã xuất thành công {count} tệp tin. ---")
+        return count
 
     # --- HELPER UTILS (COPY FROM ORIGINAL) ---
     def mirror_points_array(self, points, plane_org, plane_norm):
@@ -2173,3 +2220,73 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         
         print(f"✅ Đã tạo mặt phẳng cắt cân đối qua L và L_mirror.")
         slicer.util.selectModule("Markups")
+
+    def run_step_5_create_fragment_guides(self, params):
+        """Chỉ thực hiện tạo máng và hiển thị trong Slicer, chưa lưu file."""
+        config = [
+            ('bone_1', 'cut_1', 'CoR'),
+            ('bone_2', 'cut_2', 'CoL')
+        ]
+        
+        for bone_name, cut_name, landmark_name in config:
+            # Lấy Node
+            bone_node = slicer.util.getNode(bone_name)
+            cut_node = slicer.util.getNode(cut_name)
+            up_landmark = slicer.util.getNode(landmark_name)
+
+            if not all([bone_node, cut_node, up_landmark]):
+                print(f"❌ Thiếu node cho {bone_name}. Bỏ qua...")
+                continue
+
+            # --- Thuật toán tạo vỏ và làm mịn (Giữ nguyên logic của bạn) ---
+            bone_pd = bone_node.GetPolyData()
+            imp_bone = vtk.vtkImplicitPolyDataDistance()
+            imp_bone.SetInput(bone_pd)
+            
+            bounds = [0]*6
+            bone_pd.GetBounds(bounds)
+            margin = 10.0
+            bounds = [bounds[i] + (margin if i%2 else -margin) for i in range(6)]
+            
+            sample = vtk.vtkSampleFunction()
+            sample.SetImplicitFunction(imp_bone); sample.SetModelBounds(bounds)
+            sample.SetSampleDimensions(150, 150, 150)
+            
+            thresh = vtk.vtkImageThreshold()
+            thresh.SetInputConnection(sample.GetOutputPort())
+            thresh.ThresholdBetween(params['clearance'], params['clearance'] + params['thickness'])
+            thresh.SetOutValue(0); thresh.SetInValue(1); thresh.SetOutputScalarTypeToUnsignedChar()
+            
+            mc = vtk.vtkDiscreteMarchingCubes()
+            mc.SetInputConnection(thresh.GetOutputPort()); mc.Update()
+
+            smoother = vtk.vtkWindowedSincPolyDataFilter()
+            smoother.SetInputData(mc.GetOutput()); smoother.SetNumberOfIterations(30)
+            smoother.BoundarySmoothingOn(); smoother.Update()
+
+            # --- Logic Cắt An Toàn ---
+            p_up = [0,0,0]
+            up_landmark.GetNthControlPointPositionWorld(0, p_up)
+            imp_cut = vtk.vtkImplicitPolyDataDistance()
+            imp_cut.SetInput(cut_node.GetPolyData())
+            val_at_landmark = imp_cut.EvaluateFunction(p_up)
+            
+            clipper1 = vtk.vtkClipPolyData()
+            clipper1.SetInputData(smoother.GetOutput()); clipper1.SetClipFunction(imp_cut)
+            clipper1.SetInsideOut(val_at_landmark < 0); clipper1.Update()
+            
+            clipper2 = vtk.vtkClipPolyData()
+            clipper2.SetInputData(clipper1.GetOutput()); clipper2.SetClipFunction(imp_cut)
+            clipper2.SetValue(params['height'] if val_at_landmark > 0 else -params['height'])
+            clipper2.SetInsideOut(val_at_landmark > 0); clipper2.Update()
+
+            # --- Hiển thị kết quả ---
+            guide_node_name = f"Guide_{bone_name}"
+            try: slicer.mrmlScene.RemoveNode(slicer.util.getNode(guide_node_name))
+            except: pass
+            
+            final_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", guide_node_name)
+            final_node.SetAndObservePolyData(clipper2.GetOutput())
+            final_node.CreateDefaultDisplayNodes()
+            final_node.GetDisplayNode().SetColor(0, 1, 0) # Xanh lá
+            print(f"✅ Đã hiển thị máng: {guide_node_name}")
