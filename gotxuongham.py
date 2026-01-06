@@ -383,30 +383,24 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             qt.QApplication.restoreOverrideCursor()
 
     def onStep4(self):
+        """Bước 5: Tạo máng hướng dẫn hiển thị trên màn hình 3D."""
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
             
-            # Thiết lập thư mục lưu mặc định trên Desktop/test
-            desktop = os.path.join(os.path.expanduser("~"), "Desktop", "test")
-            if not os.path.exists(desktop):
-                os.makedirs(desktop)
-
-            # Gọi logic tạo máng với các thông số bạn yêu cầu
+            # Cấu hình các thông số máng
             params = {
                 "clearance": 0.2,
                 "thickness": 1.2,
-                "height": 15.0,
-                "output_folder": desktop
+                "height": 15.0
             }
             
+            # Gọi logic tạo máng (View only)
             self.logic.run_step_5_create_fragment_guides(params)
             
-            # Tự động mở thư mục để xem file STL
-            os.startfile(desktop)
-            qt.QMessageBox.information(None, "Xong", f"Đã tạo máng và xuất STL vào:\n{desktop}")
+            qt.QMessageBox.information(None, "Thành công", "Đã tạo máng hướng dẫn (Guide). Hãy kiểm tra trên màn hình 3D trước khi xuất file.")
             
         except Exception as e:
-            qt.QMessageBox.critical(None, "Lỗi B5", str(e))
+            qt.QMessageBox.critical(None, "Lỗi B5", f"Không thể tạo máng: {str(e)}")
         finally:
             qt.QApplication.restoreOverrideCursor()
 
@@ -2221,36 +2215,45 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         print(f"✅ Đã tạo mặt phẳng cắt cân đối qua L và L_mirror.")
         slicer.util.selectModule("Markups")
 
+    # --------------------------------------------------------------------------
+    # BƯỚC 5: TẠO MÁNG PHẪU THUẬT HIỂN THỊ (VIEW ONLY)
+    # --------------------------------------------------------------------------
     def run_step_5_create_fragment_guides(self, params):
-        """Chỉ thực hiện tạo máng và hiển thị trong Slicer, chưa lưu file."""
+        """
+        Tạo máng hướng dẫn dựa trên mảnh xương bone_1, bone_2 và hiển thị trực tiếp.
+        Không thực hiện lưu file để tối ưu tốc độ phản hồi GUI.
+        """
         config = [
             ('bone_1', 'cut_1', 'CoR'),
             ('bone_2', 'cut_2', 'CoL')
         ]
         
         for bone_name, cut_name, landmark_name in config:
-            # Lấy Node
+            # 1. Lấy và kiểm tra Node
             bone_node = slicer.util.getNode(bone_name)
             cut_node = slicer.util.getNode(cut_name)
             up_landmark = slicer.util.getNode(landmark_name)
 
             if not all([bone_node, cut_node, up_landmark]):
-                print(f"❌ Thiếu node cho {bone_name}. Bỏ qua...")
+                print(f"⚠️ Cảnh báo: Thiếu dữ liệu cho {bone_name}. Vui lòng kiểm tra lại bước gọt hàm.")
                 continue
 
-            # --- Thuật toán tạo vỏ và làm mịn (Giữ nguyên logic của bạn) ---
+            # 2. Thuật toán Implicit Distance (Tạo vỏ Shell)
             bone_pd = bone_node.GetPolyData()
             imp_bone = vtk.vtkImplicitPolyDataDistance()
             imp_bone.SetInput(bone_pd)
             
+            # Tính toán Bounds an toàn
             bounds = [0]*6
             bone_pd.GetBounds(bounds)
             margin = 10.0
             bounds = [bounds[i] + (margin if i%2 else -margin) for i in range(6)]
             
+            # Rasterize & Voxelize
             sample = vtk.vtkSampleFunction()
-            sample.SetImplicitFunction(imp_bone); sample.SetModelBounds(bounds)
-            sample.SetSampleDimensions(150, 150, 150)
+            sample.SetImplicitFunction(imp_bone)
+            sample.SetModelBounds(bounds)
+            sample.SetSampleDimensions(150, 150, 150) # Độ phân giải trung bình cho hiển thị mượt
             
             thresh = vtk.vtkImageThreshold()
             thresh.SetInputConnection(sample.GetOutputPort())
@@ -2258,35 +2261,59 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             thresh.SetOutValue(0); thresh.SetInValue(1); thresh.SetOutputScalarTypeToUnsignedChar()
             
             mc = vtk.vtkDiscreteMarchingCubes()
-            mc.SetInputConnection(thresh.GetOutputPort()); mc.Update()
+            mc.SetInputConnection(thresh.GetOutputPort())
+            mc.Update()
 
+            # 3. Làm mịn nâng cao (Windowed Sinc)
             smoother = vtk.vtkWindowedSincPolyDataFilter()
-            smoother.SetInputData(mc.GetOutput()); smoother.SetNumberOfIterations(30)
-            smoother.BoundarySmoothingOn(); smoother.Update()
+            smoother.SetInputData(mc.GetOutput())
+            smoother.SetNumberOfIterations(30)
+            smoother.BoundarySmoothingOn()
+            smoother.FeatureEdgeSmoothingOff() # Giữ các cạnh cắt sắc nét
+            smoother.Update()
 
-            # --- Logic Cắt An Toàn ---
+            # 4. Logic Cắt An Toàn (Clip theo chiều cao)
             p_up = [0,0,0]
             up_landmark.GetNthControlPointPositionWorld(0, p_up)
             imp_cut = vtk.vtkImplicitPolyDataDistance()
             imp_cut.SetInput(cut_node.GetPolyData())
+            
+            # Xác định hướng dương/âm của landmark so với mặt phẳng
             val_at_landmark = imp_cut.EvaluateFunction(p_up)
             
+            # Clip 1: Cắt ngang mặt tiếp xúc xương
             clipper1 = vtk.vtkClipPolyData()
-            clipper1.SetInputData(smoother.GetOutput()); clipper1.SetClipFunction(imp_cut)
-            clipper1.SetInsideOut(val_at_landmark < 0); clipper1.Update()
+            clipper1.SetInputData(smoother.GetOutput())
+            clipper1.SetClipFunction(imp_cut)
+            clipper1.SetValue(0.0)
+            clipper1.SetInsideOut(val_at_landmark < 0) 
+            clipper1.Update()
             
+            # Clip 2: Giới hạn chiều cao dải máng (Band)
             clipper2 = vtk.vtkClipPolyData()
-            clipper2.SetInputData(clipper1.GetOutput()); clipper2.SetClipFunction(imp_cut)
+            clipper2.SetInputData(clipper1.GetOutput())
+            clipper2.SetClipFunction(imp_cut)
+            # Dịch chuyển mặt phẳng cắt song song một khoảng = height
             clipper2.SetValue(params['height'] if val_at_landmark > 0 else -params['height'])
-            clipper2.SetInsideOut(val_at_landmark > 0); clipper2.Update()
+            clipper2.SetInsideOut(val_at_landmark > 0)
+            clipper2.Update()
 
-            # --- Hiển thị kết quả ---
+            # 5. Cập nhật Model Node trong Scene
             guide_node_name = f"Guide_{bone_name}"
-            try: slicer.mrmlScene.RemoveNode(slicer.util.getNode(guide_node_name))
+            # Dọn dẹp node cũ để cập nhật phiên bản mới
+            try:
+                old_node = slicer.util.getNode(guide_node_name)
+                slicer.mrmlScene.RemoveNode(old_node)
             except: pass
             
             final_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", guide_node_name)
             final_node.SetAndObservePolyData(clipper2.GetOutput())
             final_node.CreateDefaultDisplayNodes()
-            final_node.GetDisplayNode().SetColor(0, 1, 0) # Xanh lá
-            print(f"✅ Đã hiển thị máng: {guide_node_name}")
+            
+            # Cấu hình hiển thị: Màu xanh lá, độ mờ nhẹ để dễ quan sát xương bên dưới
+            dn = final_node.GetDisplayNode()
+            dn.SetColor(0.2, 1.0, 0.2) 
+            dn.SetOpacity(0.9)
+            dn.SetBackfaceCulling(0) # Hiển thị cả mặt trong máng
+            
+            print(f"✅ Đã cập nhật máng hiển thị: {guide_node_name}")
