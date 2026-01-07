@@ -2218,102 +2218,86 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
     # --------------------------------------------------------------------------
     # BƯỚC 5: TẠO MÁNG PHẪU THUẬT HIỂN THỊ (VIEW ONLY)
     # --------------------------------------------------------------------------
+
     def run_step_5_create_fragment_guides(self, params):
         """
-        Tạo máng hướng dẫn dựa trên mảnh xương bone_1, bone_2 và hiển thị trực tiếp.
-        Không thực hiện lưu file để tối ưu tốc độ phản hồi GUI.
+        Tạo máng hướng dẫn ôm sát và bao phủ toàn bộ bone_1, bone_2.
+        Dựa trên thuật toán Implicit Distance (Offsetting).
         """
-        config = [
-            ('bone_1', 'cut_1', 'CoR'),
-            ('bone_2', 'cut_2', 'CoL')
-        ]
+        # Danh sách các xương cần tạo máng
+        bone_list = ['bone_1', 'bone_2']
         
-        for bone_name, cut_name, landmark_name in config:
-            # 1. Lấy và kiểm tra Node
+        for bone_name in bone_list:
+            # 1. Lấy dữ liệu Node từ Scene
             bone_node = slicer.util.getNode(bone_name)
-            cut_node = slicer.util.getNode(cut_name)
-            up_landmark = slicer.util.getNode(landmark_name)
 
-            if not all([bone_node, cut_node, up_landmark]):
-                print(f"⚠️ Cảnh báo: Thiếu dữ liệu cho {bone_name}. Vui lòng kiểm tra lại bước gọt hàm.")
+            if not bone_node:
+                print(f"⚠️ Cảnh báo: Không tìm thấy {bone_name} trong Scene. Bỏ qua...")
                 continue
 
-            # 2. Thuật toán Implicit Distance (Tạo vỏ Shell)
+            # 2. Thuật toán tạo vỏ (Shell) ôm sát
             bone_pd = bone_node.GetPolyData()
+            
+            # Tạo hàm tính khoảng cách đến bề mặt xương
             imp_bone = vtk.vtkImplicitPolyDataDistance()
             imp_bone.SetInput(bone_pd)
             
-            # Tính toán Bounds an toàn
+            # Tính toán vùng bao quanh (Bounds)
             bounds = [0]*6
             bone_pd.GetBounds(bounds)
-            margin = 10.0
+            margin = 10.0 # Tạo lề 10mm để đảm bảo bao hết xương
             bounds = [bounds[i] + (margin if i%2 else -margin) for i in range(6)]
             
-            # Rasterize & Voxelize
+            # Voxelize không gian (Tạo khối Volume quanh xương)
             sample = vtk.vtkSampleFunction()
             sample.SetImplicitFunction(imp_bone)
             sample.SetModelBounds(bounds)
-            sample.SetSampleDimensions(150, 150, 150) # Độ phân giải trung bình cho hiển thị mượt
+            # Độ phân giải 150 cho sự cân bằng giữa tốc độ và độ chi tiết
+            sample.SetSampleDimensions(150, 150, 150) 
             
+            # 3. Tạo độ dày cho máng (Thresholding)
             thresh = vtk.vtkImageThreshold()
             thresh.SetInputConnection(sample.GetOutputPort())
+            # Tạo khoảng hở (clearance) và độ dày (thickness)
             thresh.ThresholdBetween(params['clearance'], params['clearance'] + params['thickness'])
-            thresh.SetOutValue(0); thresh.SetInValue(1); thresh.SetOutputScalarTypeToUnsignedChar()
+            thresh.SetOutValue(0)
+            thresh.SetInValue(1)
+            thresh.SetOutputScalarTypeToUnsignedChar()
             
+            # Chuyển Volume thành Mesh bề mặt
             mc = vtk.vtkDiscreteMarchingCubes()
             mc.SetInputConnection(thresh.GetOutputPort())
             mc.Update()
 
-            # 3. Làm mịn nâng cao (Windowed Sinc)
+            # 4. Làm mịn bề mặt máng
             smoother = vtk.vtkWindowedSincPolyDataFilter()
             smoother.SetInputData(mc.GetOutput())
-            smoother.SetNumberOfIterations(30)
+            smoother.SetNumberOfIterations(25)
             smoother.BoundarySmoothingOn()
-            smoother.FeatureEdgeSmoothingOff() # Giữ các cạnh cắt sắc nét
             smoother.Update()
 
-            # 4. Logic Cắt An Toàn (Clip theo chiều cao)
-            p_up = [0,0,0]
-            up_landmark.GetNthControlPointPositionWorld(0, p_up)
-            imp_cut = vtk.vtkImplicitPolyDataDistance()
-            imp_cut.SetInput(cut_node.GetPolyData())
-            
-            # Xác định hướng dương/âm của landmark so với mặt phẳng
-            val_at_landmark = imp_cut.EvaluateFunction(p_up)
-            
-            # Clip 1: Cắt ngang mặt tiếp xúc xương
-            clipper1 = vtk.vtkClipPolyData()
-            clipper1.SetInputData(smoother.GetOutput())
-            clipper1.SetClipFunction(imp_cut)
-            clipper1.SetValue(0.0)
-            clipper1.SetInsideOut(val_at_landmark < 0) 
-            clipper1.Update()
-            
-            # Clip 2: Giới hạn chiều cao dải máng (Band)
-            clipper2 = vtk.vtkClipPolyData()
-            clipper2.SetInputData(clipper1.GetOutput())
-            clipper2.SetClipFunction(imp_cut)
-            # Dịch chuyển mặt phẳng cắt song song một khoảng = height
-            clipper2.SetValue(params['height'] if val_at_landmark > 0 else -params['height'])
-            clipper2.SetInsideOut(val_at_landmark > 0)
-            clipper2.Update()
-
-            # 5. Cập nhật Model Node trong Scene
+            # 5. Hiển thị kết quả lên Slicer
             guide_node_name = f"Guide_{bone_name}"
-            # Dọn dẹp node cũ để cập nhật phiên bản mới
+            
+            # Xóa node cũ nếu đã tồn tại để tránh trùng lặp
             try:
                 old_node = slicer.util.getNode(guide_node_name)
                 slicer.mrmlScene.RemoveNode(old_node)
             except: pass
             
+            # Tạo node mới
             final_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", guide_node_name)
-            final_node.SetAndObservePolyData(clipper2.GetOutput())
+            final_node.SetAndObservePolyData(smoother.GetOutput())
             final_node.CreateDefaultDisplayNodes()
             
-            # Cấu hình hiển thị: Màu xanh lá, độ mờ nhẹ để dễ quan sát xương bên dưới
+            # Cấu hình hiển thị
             dn = final_node.GetDisplayNode()
-            dn.SetColor(0.2, 1.0, 0.2) 
-            dn.SetOpacity(0.9)
-            dn.SetBackfaceCulling(0) # Hiển thị cả mặt trong máng
-            
-            print(f"✅ Đã cập nhật máng hiển thị: {guide_node_name}")
+            if bone_name == 'bone_1':
+                dn.SetColor(0.2, 0.8, 1.0) # Màu xanh dương nhạt cho xương 1
+            else:
+                dn.SetColor(1.0, 0.5, 0.0) # Màu cam cho xương 2
+                
+            dn.SetOpacity(0.8) # Độ mờ để quan sát được xương bên dưới
+            dn.SetBackfaceCulling(0) # Quan sát được cả mặt trong
+
+        print("✅ Đã hoàn thành tạo máng ôm toàn bộ bone_1 và bone_2.")
