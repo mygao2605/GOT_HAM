@@ -1971,87 +1971,9 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         cross_prod = np.cross(axis, vector)
         return vector * cos_t + cross_prod * sin_t
     
-# --------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # BƯỚC MỞ RỘNG: TẠO SUPPORT IN 3D (PILLAR)
     # --------------------------------------------------------------------------
-    def generate_pillar_supports(self, inputNode, density=1.0, radius=0.8):
-        """
-        Tạo chân chống (Support) dạng trụ thẳng cho các vùng lơ lửng.
-        - density: Mật độ support (0.5 - 2.0)
-        - radius: Bán kính chân chống (mm)
-        """
-        if not inputNode: return
-        
-        print("Đang tạo support in 3D...")
-        
-        # 1. Lấy dữ liệu lưới và tính Normals
-        poly = self.ensure_normals(inputNode.GetPolyData())
-        
-        # 2. Tìm các điểm "hướng xuống đất" (Overhangs)
-        # Normal Z < -0.7 nghĩa là mặt đó đang úp xuống
-        points = poly.GetPoints()
-        normals = poly.GetPointData().GetNormals()
-        
-        overhang_pts = vtk.vtkPoints()
-        
-        # Tính Z thấp nhất để làm sàn
-        bounds = poly.GetBounds()
-        z_floor = bounds[4] - 5.0 # Sàn thấp hơn vật thể 5mm
-        
-        # Lọc điểm (Sampling để không quá dày đặc)
-        step = int(10 / density) # Bước nhảy
-        if step < 1: step = 1
-        
-        for i in range(0, points.GetNumberOfPoints(), step):
-            n = [0.0, 0.0, 0.0]
-            normals.GetTuple(i, n)
-            
-            # Nếu vector pháp tuyến hướng xuống (Z âm)
-            if n[2] < -0.5: 
-                p = points.GetPoint(i)
-                overhang_pts.InsertNextPoint(p)
-
-        if overhang_pts.GetNumberOfPoints() == 0:
-            print("Không tìm thấy vùng nào cần support.")
-            return
-
-        # 3. Tạo các trụ (Cylinders)
-        appendFilter = vtk.vtkAppendPolyData()
-        
-        for i in range(overhang_pts.GetNumberOfPoints()):
-            p_top = overhang_pts.GetPoint(i)
-            p_bottom = [p_top[0], p_top[1], z_floor]
-            
-            # Tạo đường thẳng (Line)
-            lineSource = vtk.vtkLineSource()
-            lineSource.SetPoint1(p_top)
-            lineSource.SetPoint2(p_bottom)
-            
-            # Biến đường thẳng thành ống (Tube)
-            tube = vtk.vtkTubeFilter()
-            tube.SetInputConnection(lineSource.GetOutputPort())
-            tube.SetRadius(radius)
-            tube.SetNumberOfSides(6) # 6 cạnh cho nhẹ
-            tube.CappingOn()
-            tube.Update()
-            
-            appendFilter.AddInputData(tube.GetOutput())
-            
-        appendFilter.Update()
-        
-        # 4. Tạo Cone ở đỉnh tiếp xúc (để dễ bẻ gãy)
-        # (Optional - Phần này làm code phức tạp nên tạm bỏ qua, chỉ dùng trụ trơn)
-
-        # 5. Hiển thị
-        supportPD = appendFilter.GetOutput()
-        self.create_model_node("Print_Supports", supportPD, color=(0.5, 0.5, 0.5))
-        
-        # 6. Gộp vào model gốc (nếu muốn xuất 1 file STL duy nhất)
-        # Hoặc để riêng để người dùng tự gộp
-        print(f"Đã tạo {overhang_pts.GetNumberOfPoints()} chân chống.")
-    
-
-
     def create_ribbon_polydata(self, curve_node, angle, depth, out, ext_f, ext_b):
         if not curve_node: return None
         pts = []
