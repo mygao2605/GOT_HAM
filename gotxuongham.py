@@ -2356,7 +2356,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         clipper_curve.Update()
 
         # 5. Hiển thị
-        result_name = "Final_Guide_Fixed"
+        result_name = "Final_Guide_bone_1"
         try: slicer.mrmlScene.RemoveNode(slicer.util.getNode(result_name))
         except: pass
         
