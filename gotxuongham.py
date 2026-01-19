@@ -2154,112 +2154,6 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
 
         print("✅ Đã hoàn thành tạo máng ôm toàn bộ bone_1 và bone_2.")
 
-    # def create_selected_curves(self, num_samples=200):
-    #     # =========================
-    #     # 1. GET LANDMARKS
-    #     # =========================
-    #     try:
-    #         GoR = slicer.util.getNode("GoR")
-    #         Me  = slicer.util.getNode("Me")
-    #         GoL = slicer.util.getNode("GoL")
-    #     except:
-    #         print("❌ Error: Landmarks GoR, Me, or GoL not found!")
-    #         return
-
-    #     pR = np.array(GoR.GetNthControlPointPositionWorld(0))
-    #     pM = np.array(Me.GetNthControlPointPositionWorld(0))
-    #     pL = np.array(GoL.GetNthControlPointPositionWorld(0))
-
-    #     # =========================
-    #     # 2. PLANE & AXES CALCULATION
-    #     # =========================
-    #     plane_normal = np.cross(pR - pM, pL - pM)
-    #     plane_normal /= np.linalg.norm(plane_normal)
-
-    #     x_axis = pL - pR
-    #     x_axis /= np.linalg.norm(x_axis)
-
-    #     y_axis = np.cross(plane_normal, x_axis)
-    #     y_axis /= np.linalg.norm(y_axis)
-
-    #     def to_2d(p):
-    #         d = p - pM
-    #         return np.dot(d, x_axis), np.dot(d, y_axis)
-
-    #     xR, yR = to_2d(pR)
-    #     xL, yL = to_2d(pL)
-
-    #     aR = yR / (xR ** 2) if xR != 0 else 0
-    #     aL = yL / (xL ** 2) if xL != 0 else 0
-
-    #     # =========================
-    #     # 3. HELPER FUNCTIONS
-    #     # =========================
-    #     def project_to_surface(p, bone_pd):
-    #         imp = vtk.vtkImplicitPolyDataDistance()
-    #         imp.SetInput(bone_pd)
-    #         grad = [0.0, 0.0, 0.0]
-    #         imp.EvaluateGradient(p, grad)
-    #         grad = np.array(grad)
-    #         n = np.linalg.norm(grad)
-    #         if n < 1e-6: return p
-    #         grad /= n
-    #         dist = imp.EvaluateFunction(p)
-    #         return p - dist * grad
-
-    #     def build_curve(xs, a, bone_name, curve_name, color):
-    #         bone = slicer.util.getNode(bone_name)
-    #         bone_pd = bone.GetPolyData()
-
-    #         points = vtk.vtkPoints()
-    #         lines = vtk.vtkCellArray()
-    #         lines.InsertNextCell(len(xs))
-
-    #         for x in xs:
-    #             y = a * x * x
-    #             p = pM + x * x_axis + y * y_axis
-    #             p = project_to_surface(p, bone_pd)
-    #             pid = points.InsertNextPoint(p)
-    #             lines.InsertCellPoint(pid)
-
-    #         poly = vtk.vtkPolyData()
-    #         poly.SetPoints(points)
-    #         poly.SetLines(lines)
-
-    #         # Spline Smoothing
-    #         spline = vtk.vtkSplineFilter()
-    #         spline.SetInputData(poly)
-    #         spline.SetSubdivideToSpecified()
-    #         spline.SetNumberOfSubdivisions(len(xs) * 4)
-    #         spline.Update()
-
-    #         # Remove old node if exists
-    #         nodes = slicer.util.getNodesByClass("vtkMRMLModelNode")
-    #         for n in nodes:
-    #             if n.GetName() == curve_name:
-    #                 slicer.mrmlScene.RemoveNode(n)
-
-    #         # Create Model Node
-    #         model = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", curve_name)
-    #         model.SetAndObservePolyData(spline.GetOutput())
-    #         model.CreateDefaultDisplayNodes()
-    #         dn = model.GetDisplayNode()
-    #         dn.SetColor(*color)
-    #         dn.SetLineWidth(4)
-    #         return model
-
-    #     # =========================
-    #     # 4. EXECUTION (The fix)
-    #     # =========================
-    #     xs_R = np.linspace(0, xR, num_samples)
-    #     xs_L = np.linspace(0, xL, num_samples)
-
-    #     # Call the helper functions OUTSIDE their definition
-    #     build_curve(xs_R, aR, "bone_1", "Curve_bone_1_Me_GoR", (1.0, 0.2, 0.2))
-    #     build_curve(xs_L, aL, "bone_2", "Curve_bone_2_Me_GoL", (0.2, 0.6, 1.0))
-
-    #     print("✅ Successfully created smooth curves.")
-
     def guide_bone_1_export(self, clearance=0.2, shell=2.0, height=18.0):
         # 1. Lấy Nodes
         try:
@@ -2306,7 +2200,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         clipper_height.SetInputData(guide_pd)
         clipper_height.SetClipFunction(imp_cut)
         clipper_height.SetValue(height)
-        clipper_height.SetInsideOut(True)
+        clipper_height.SetInsideOut(True) # lay phan nguoc lai
         clipper_height.Update()
 
         # 4. TRÍCH XUẤT CURVE THỦ CÔNG (Dùng Control Points)
@@ -2355,7 +2249,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         clipper_curve = vtk.vtkClipPolyData()
         clipper_curve.SetInputData(clipper_height.GetOutput())
         clipper_curve.SetClipFunction(imp_curve)
-        clipper_curve.SetInsideOut(True) 
+        clipper_curve.SetInsideOut(False) 
         clipper_curve.Update()
 
         # 5. Hiển thị kết quả
