@@ -2267,12 +2267,12 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             curve_node = slicer.util.getNode('OC_R')
             cut_node = slicer.util.getNode('cut_1')
         except:
-            print("❌ Lỗi: Thiếu node đầu vào.")
+            print("❌ Lỗi: Thiếu node bone_1, OC_R hoặc cut_1.")
             return
 
-        print("--- Đang xử lý: Đảo ngược vùng chọn (Clip Inside/Outside) ---")
+        print("--- Đang tính toán máng hướng dẫn (Manual Logic) ---")
 
-        # 2. Tạo vỏ Shell
+        # 2. Tạo vỏ Shell (Màng bao quanh xương)
         bone_pd = bone_node.GetPolyData()
         imp_bone = vtk.vtkImplicitPolyDataDistance()
         imp_bone.SetInput(bone_pd)
@@ -2285,7 +2285,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         sample = vtk.vtkSampleFunction()
         sample.SetImplicitFunction(imp_bone)
         sample.SetModelBounds(padded_bounds)
-        sample.SetSampleDimensions(150, 150, 150)
+        sample.SetSampleDimensions(120, 120, 120) # Giảm nhẹ để tính toán nhanh
         
         thresh = vtk.vtkImageThreshold()
         thresh.SetInputConnection(sample.GetOutputPort())
@@ -2297,7 +2297,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         mc.Update()
         guide_pd = mc.GetOutput()
 
-        # 3. Giới hạn Chiều cao
+        # 3. Giới hạn Chiều cao (Clip theo cao độ)
         cut_pd = cut_node.GetPolyData()
         imp_cut = vtk.vtkImplicitPolyDataDistance()
         imp_cut.SetInput(cut_pd)
@@ -2309,9 +2309,15 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         clipper_height.SetInsideOut(True)
         clipper_height.Update()
 
-        # 4. Trích xuất Curve và tạo tường cắt
+        # 4. TRÍCH XUẤT CURVE THỦ CÔNG (Dùng Control Points)
         points = vtk.vtkPoints()
+        lines = vtk.vtkCellArray()
+        
         n_points = curve_node.GetNumberOfControlPoints()
+        if n_points < 2:
+            print("❌ Lỗi: Curve OC_R cần ít nhất 2 điểm.")
+            return
+            
         for i in range(n_points):
             pos = [0, 0, 0]
             curve_node.GetNthControlPointPositionWorld(i, pos)
@@ -2322,40 +2328,37 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         for i in range(n_points):
             poly_line.GetPointIds().SetId(i, i)
             
-        lines = vtk.vtkCellArray()
         lines.InsertNextCell(poly_line)
+        
         curve_pd = vtk.vtkPolyData()
         curve_pd.SetPoints(points)
         curve_pd.SetLines(lines)
 
-        # Đùn tường cắt xuyên qua xương
-        extrude = vtk.vtkLinearExtrusionFilter()
-        # Dịch chuyển nhẹ curve để tường bao phủ cả trên và dưới
+        # Tạo bức tường cắt (Extrusion)
+        # Để an toàn, chúng ta đùn theo hướng Z từ -200 đến +200
         transform = vtk.vtkTransform()
-        transform.Translate(0, 0, -100)
+        transform.Translate(0, 0, -200)
         tf_filter = vtk.vtkTransformPolyDataFilter()
         tf_filter.SetInputData(curve_pd)
         tf_filter.SetTransform(transform)
         tf_filter.Update()
 
+        extrude = vtk.vtkLinearExtrusionFilter()
         extrude.SetInputData(tf_filter.GetOutput())
-        extrude.SetVector(0, 0, 200) 
+        extrude.SetExtrusionTypeToVectorExtrusion()
+        extrude.SetVector(0, 0, 400) 
         extrude.Update()
 
         imp_curve = vtk.vtkImplicitPolyDataDistance()
         imp_curve.SetInput(extrude.GetOutput())
         
-        # --- ĐIỂM CẦN CHÚ Ý ---
         clipper_curve = vtk.vtkClipPolyData()
         clipper_curve.SetInputData(clipper_height.GetOutput())
         clipper_curve.SetClipFunction(imp_curve)
-        
-        # Đổi giá trị này nếu bị ôm ngược phía trong/ngoài
-        clipper_curve.SetInsideOut(False) 
-        
+        clipper_curve.SetInsideOut(True) 
         clipper_curve.Update()
 
-        # 5. Hiển thị
+        # 5. Hiển thị kết quả
         result_name = "Final_Guide_bone_1"
         try: slicer.mrmlScene.RemoveNode(slicer.util.getNode(result_name))
         except: pass
@@ -2363,14 +2366,14 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", result_name)
         model_node.SetAndObservePolyData(clipper_curve.GetOutput())
         model_node.CreateDefaultDisplayNodes()
-        model_node.GetDisplayNode().SetColor(0.2, 0.8, 1.0) # Màu xanh dương dễ nhìn
+        model_node.GetDisplayNode().SetColor(0.2, 0.9, 0.5)
+        
+        print(f"✅ Đã tạo xong máng hướng dẫn!")
         
     def guide_bone_2_export(self, clearance=0.2, shell=2.0, height=18.0):
-        # --- CẤU HÌNH ---
         config = [
             ('bone_2', 'OC_L', 'cut_2', 'GoL')
         ]
-        
         for bone_name, curve_name, cut_name, landmark_name in config:
             print(f"\n>>> ĐANG XỬ LÝ: {bone_name} <<<")
             
@@ -2379,13 +2382,9 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             curve_node = slicer.mrmlScene.GetFirstNodeByName(curve_name)
             cut_node = slicer.mrmlScene.GetFirstNodeByName(cut_name)
             landmark_node = slicer.mrmlScene.GetFirstNodeByName(landmark_name)
-            
             if not all([bone_node, curve_node, cut_node, landmark_node]):
                 print(f" ERROR: Không tìm thấy đủ nodes đầu vào! Vui lòng kiểm tra tên trong Data Panel.")
                 continue
-
-            # 1. TẠO VỎ MÁNG (SHELL)
-            print(" -> Bước 1: Tạo Shell...")
             bone_pd = bone_node.GetPolyData()
             imp_bone = vtk.vtkImplicitPolyDataDistance()
             imp_bone.SetInput(bone_pd)
@@ -2412,7 +2411,6 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             guide_pd = mc.GetOutput()
 
             # 2. GỌT MẶT TRÊN (CLIP BY HEIGHT)
-            print(" -> Bước 2: Cắt mặt trên...")
             p_lm = [0,0,0]
             landmark_node.GetNthControlPointPositionWorld(0, p_lm)
             
@@ -2427,12 +2425,8 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             dist_lm = imp_cut.EvaluateFunction(p_lm)
             clipper_h.SetInsideOut(dist_lm < height) 
             clipper_h.Update()
-
-            # 3. CẮT THEO ĐƯỜNG CONG (CURVE CLIP)
-            print(" -> Bước 3: Cắt theo đường cong...")
             curve_pd = vtk.vtkPolyData()
-            
-            # Thử lấy dữ liệu curve bằng nhiều cách để tránh lỗi phiên bản
+
             if hasattr(curve_node, 'GetCurveDisplayPolyData') and curve_node.GetCurveDisplayPolyData():
                 curve_pd.DeepCopy(curve_node.GetCurveDisplayPolyData())
             elif hasattr(curve_node, 'GetNavigationPolyData'):
