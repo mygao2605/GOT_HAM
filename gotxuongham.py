@@ -2148,117 +2148,117 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         """
         # Danh sách các xương cần tạo máng
 
-        self.create_selected_curves()
+        # self.create_selected_curves()
         self.guide_bone_1_export(clearance=0.2, shell=2.0, height=18.0)
         self.guide_bone_2_export(clearance=0.2, shell=2.0, height=18.0)
 
         print("✅ Đã hoàn thành tạo máng ôm toàn bộ bone_1 và bone_2.")
 
-    def create_selected_curves(self, num_samples=200):
-        # =========================
-        # 1. GET LANDMARKS
-        # =========================
-        try:
-            GoR = slicer.util.getNode("GoR")
-            Me  = slicer.util.getNode("Me")
-            GoL = slicer.util.getNode("GoL")
-        except:
-            print("❌ Error: Landmarks GoR, Me, or GoL not found!")
-            return
+    # def create_selected_curves(self, num_samples=200):
+    #     # =========================
+    #     # 1. GET LANDMARKS
+    #     # =========================
+    #     try:
+    #         GoR = slicer.util.getNode("GoR")
+    #         Me  = slicer.util.getNode("Me")
+    #         GoL = slicer.util.getNode("GoL")
+    #     except:
+    #         print("❌ Error: Landmarks GoR, Me, or GoL not found!")
+    #         return
 
-        pR = np.array(GoR.GetNthControlPointPositionWorld(0))
-        pM = np.array(Me.GetNthControlPointPositionWorld(0))
-        pL = np.array(GoL.GetNthControlPointPositionWorld(0))
+    #     pR = np.array(GoR.GetNthControlPointPositionWorld(0))
+    #     pM = np.array(Me.GetNthControlPointPositionWorld(0))
+    #     pL = np.array(GoL.GetNthControlPointPositionWorld(0))
 
-        # =========================
-        # 2. PLANE & AXES CALCULATION
-        # =========================
-        plane_normal = np.cross(pR - pM, pL - pM)
-        plane_normal /= np.linalg.norm(plane_normal)
+    #     # =========================
+    #     # 2. PLANE & AXES CALCULATION
+    #     # =========================
+    #     plane_normal = np.cross(pR - pM, pL - pM)
+    #     plane_normal /= np.linalg.norm(plane_normal)
 
-        x_axis = pL - pR
-        x_axis /= np.linalg.norm(x_axis)
+    #     x_axis = pL - pR
+    #     x_axis /= np.linalg.norm(x_axis)
 
-        y_axis = np.cross(plane_normal, x_axis)
-        y_axis /= np.linalg.norm(y_axis)
+    #     y_axis = np.cross(plane_normal, x_axis)
+    #     y_axis /= np.linalg.norm(y_axis)
 
-        def to_2d(p):
-            d = p - pM
-            return np.dot(d, x_axis), np.dot(d, y_axis)
+    #     def to_2d(p):
+    #         d = p - pM
+    #         return np.dot(d, x_axis), np.dot(d, y_axis)
 
-        xR, yR = to_2d(pR)
-        xL, yL = to_2d(pL)
+    #     xR, yR = to_2d(pR)
+    #     xL, yL = to_2d(pL)
 
-        aR = yR / (xR ** 2) if xR != 0 else 0
-        aL = yL / (xL ** 2) if xL != 0 else 0
+    #     aR = yR / (xR ** 2) if xR != 0 else 0
+    #     aL = yL / (xL ** 2) if xL != 0 else 0
 
-        # =========================
-        # 3. HELPER FUNCTIONS
-        # =========================
-        def project_to_surface(p, bone_pd):
-            imp = vtk.vtkImplicitPolyDataDistance()
-            imp.SetInput(bone_pd)
-            grad = [0.0, 0.0, 0.0]
-            imp.EvaluateGradient(p, grad)
-            grad = np.array(grad)
-            n = np.linalg.norm(grad)
-            if n < 1e-6: return p
-            grad /= n
-            dist = imp.EvaluateFunction(p)
-            return p - dist * grad
+    #     # =========================
+    #     # 3. HELPER FUNCTIONS
+    #     # =========================
+    #     def project_to_surface(p, bone_pd):
+    #         imp = vtk.vtkImplicitPolyDataDistance()
+    #         imp.SetInput(bone_pd)
+    #         grad = [0.0, 0.0, 0.0]
+    #         imp.EvaluateGradient(p, grad)
+    #         grad = np.array(grad)
+    #         n = np.linalg.norm(grad)
+    #         if n < 1e-6: return p
+    #         grad /= n
+    #         dist = imp.EvaluateFunction(p)
+    #         return p - dist * grad
 
-        def build_curve(xs, a, bone_name, curve_name, color):
-            bone = slicer.util.getNode(bone_name)
-            bone_pd = bone.GetPolyData()
+    #     def build_curve(xs, a, bone_name, curve_name, color):
+    #         bone = slicer.util.getNode(bone_name)
+    #         bone_pd = bone.GetPolyData()
 
-            points = vtk.vtkPoints()
-            lines = vtk.vtkCellArray()
-            lines.InsertNextCell(len(xs))
+    #         points = vtk.vtkPoints()
+    #         lines = vtk.vtkCellArray()
+    #         lines.InsertNextCell(len(xs))
 
-            for x in xs:
-                y = a * x * x
-                p = pM + x * x_axis + y * y_axis
-                p = project_to_surface(p, bone_pd)
-                pid = points.InsertNextPoint(p)
-                lines.InsertCellPoint(pid)
+    #         for x in xs:
+    #             y = a * x * x
+    #             p = pM + x * x_axis + y * y_axis
+    #             p = project_to_surface(p, bone_pd)
+    #             pid = points.InsertNextPoint(p)
+    #             lines.InsertCellPoint(pid)
 
-            poly = vtk.vtkPolyData()
-            poly.SetPoints(points)
-            poly.SetLines(lines)
+    #         poly = vtk.vtkPolyData()
+    #         poly.SetPoints(points)
+    #         poly.SetLines(lines)
 
-            # Spline Smoothing
-            spline = vtk.vtkSplineFilter()
-            spline.SetInputData(poly)
-            spline.SetSubdivideToSpecified()
-            spline.SetNumberOfSubdivisions(len(xs) * 4)
-            spline.Update()
+    #         # Spline Smoothing
+    #         spline = vtk.vtkSplineFilter()
+    #         spline.SetInputData(poly)
+    #         spline.SetSubdivideToSpecified()
+    #         spline.SetNumberOfSubdivisions(len(xs) * 4)
+    #         spline.Update()
 
-            # Remove old node if exists
-            nodes = slicer.util.getNodesByClass("vtkMRMLModelNode")
-            for n in nodes:
-                if n.GetName() == curve_name:
-                    slicer.mrmlScene.RemoveNode(n)
+    #         # Remove old node if exists
+    #         nodes = slicer.util.getNodesByClass("vtkMRMLModelNode")
+    #         for n in nodes:
+    #             if n.GetName() == curve_name:
+    #                 slicer.mrmlScene.RemoveNode(n)
 
-            # Create Model Node
-            model = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", curve_name)
-            model.SetAndObservePolyData(spline.GetOutput())
-            model.CreateDefaultDisplayNodes()
-            dn = model.GetDisplayNode()
-            dn.SetColor(*color)
-            dn.SetLineWidth(4)
-            return model
+    #         # Create Model Node
+    #         model = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", curve_name)
+    #         model.SetAndObservePolyData(spline.GetOutput())
+    #         model.CreateDefaultDisplayNodes()
+    #         dn = model.GetDisplayNode()
+    #         dn.SetColor(*color)
+    #         dn.SetLineWidth(4)
+    #         return model
 
-        # =========================
-        # 4. EXECUTION (The fix)
-        # =========================
-        xs_R = np.linspace(0, xR, num_samples)
-        xs_L = np.linspace(0, xL, num_samples)
+    #     # =========================
+    #     # 4. EXECUTION (The fix)
+    #     # =========================
+    #     xs_R = np.linspace(0, xR, num_samples)
+    #     xs_L = np.linspace(0, xL, num_samples)
 
-        # Call the helper functions OUTSIDE their definition
-        build_curve(xs_R, aR, "bone_1", "Curve_bone_1_Me_GoR", (1.0, 0.2, 0.2))
-        build_curve(xs_L, aL, "bone_2", "Curve_bone_2_Me_GoL", (0.2, 0.6, 1.0))
+    #     # Call the helper functions OUTSIDE their definition
+    #     build_curve(xs_R, aR, "bone_1", "Curve_bone_1_Me_GoR", (1.0, 0.2, 0.2))
+    #     build_curve(xs_L, aL, "bone_2", "Curve_bone_2_Me_GoL", (0.2, 0.6, 1.0))
 
-        print("✅ Successfully created smooth curves.")
+    #     print("✅ Successfully created smooth curves.")
 
     def guide_bone_1_export(self, clearance=0.2, shell=2.0, height=18.0):
         # 1. Lấy Nodes
@@ -2365,7 +2365,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         model_node.CreateDefaultDisplayNodes()
         model_node.GetDisplayNode().SetColor(0.2, 0.8, 1.0) # Màu xanh dương dễ nhìn
         
-    def guide_bone_2_export(clearance=0.2, shell=2.0, height=18.0):
+    def guide_bone_2_export(self, clearance=0.2, shell=2.0, height=18.0):
         # --- CẤU HÌNH ---
         config = [
             ('bone_2', 'OC_L', 'cut_2', 'GoL')
