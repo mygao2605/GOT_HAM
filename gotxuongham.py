@@ -2251,6 +2251,26 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         clipper_curve.SetClipFunction(imp_curve)
         clipper_curve.SetInsideOut(False) 
         clipper_curve.Update()
+        # 1. Bộ lọc WindowedSinc giúp làm mịn nhưng không làm co (shrink) kích thước máng
+        smoother = vtk.vtkWindowedSincPolyDataFilter()
+        smoother.SetInputConnection(clipper_curve.GetOutputPort())
+        smoother.SetNumberOfIterations(20) # Bạn có thể tăng lên 30 nếu muốn mượt hơn
+        smoother.BoundarySmoothingOn()
+        smoother.FeatureEdgeSmoothingOff()
+        smoother.SetPassBand(0.1) # Giá trị càng nhỏ càng mượt (thử 0.05 nếu muốn cực mượt)
+        smoother.NonManifoldSmoothingOn()
+        smoother.NormalizeCoordinatesOn()
+        smoother.Update()
+
+        # 2. Tính toán lại Vector pháp tuyến (Normals) 
+        # Bước này cực kỳ quan trọng để đổ bóng bề mặt trông mượt và bóng, không bị loang lổ
+        normals = vtk.vtkPolyDataNormals()
+        normals.SetInputConnection(smoother.GetOutputPort())
+        normals.FeatureAngleSmoothingOn()
+        normals.SetFeatureAngle(60.0)
+        normals.ConsistencyOn()
+        normals.SplittingOff()
+        normals.Update()
 
         # 5. Hiển thị kết quả
         result_name = "Final_Guide_bone_1"
@@ -2258,7 +2278,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         except: pass
         
         model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", result_name)
-        model_node.SetAndObservePolyData(clipper_curve.GetOutput())
+        model_node.SetAndObservePolyData(normals.GetOutput())
         model_node.CreateDefaultDisplayNodes()
         model_node.GetDisplayNode().SetColor(0.2, 0.9, 0.5)
         
@@ -2359,6 +2379,25 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             clipper_c.SetInsideOut(val_lm_curve < 0)
             clipper_c.Update()
 
+            smoother = vtk.vtkWindowedSincPolyDataFilter()
+            smoother.SetInputConnection(clipper_c.GetOutputPort())
+            smoother.SetNumberOfIterations(25) # Số lần lặp để làm mịn
+            smoother.BoundarySmoothingOn()
+            smoother.FeatureEdgeSmoothingOff()
+            smoother.SetPassBand(0.1) # Độ mịn (càng nhỏ càng mượt)
+            smoother.NonManifoldSmoothingOn()
+            smoother.NormalizeCoordinatesOn()
+            smoother.Update()
+
+            # Tính toán lại Vector pháp tuyến để bề mặt hiển thị bóng mượt
+            normals = vtk.vtkPolyDataNormals()
+            normals.SetInputConnection(smoother.GetOutputPort())
+            normals.FeatureAngleSmoothingOn()
+            normals.SetFeatureAngle(60.0)
+            normals.ConsistencyOn()
+            normals.SplittingOff()
+            normals.Update()
+
             # 4. HIỂN THỊ KẾT QUẢ (SỬA LỖI TẠI ĐÂY)
             result_name = f"Final_Guide_{bone_name}"
             
@@ -2368,7 +2407,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
                 slicer.mrmlScene.RemoveNode(existing_node)
 
             final_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", result_name)
-            final_node.SetAndObservePolyData(clipper_c.GetOutput())
+            final_node.SetAndObservePolyData(normals.GetOutput())
             final_node.CreateDefaultDisplayNodes()
             final_node.GetDisplayNode().SetColor(0.2, 0.6, 1.0) # Màu xanh dương
             
