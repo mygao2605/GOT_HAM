@@ -1834,22 +1834,6 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         conn = vtk.vtkPolyDataConnectivityFilter(); conn.SetInputConnection(clean.GetOutputPort()); conn.SetExtractionModeToLargestRegion(); conn.Update()
         self.create_model_node(guideName, conn.GetOutput(), color=(0.6, 1.0, 0.6), opacity=1.0)
 
-    # --------------------------------------------------------------------------
-    # BƯỚC 5: XUẤT STL
-    # --------------------------------------------------------------------------
-    # def run_step_5_export(self, folder):
-    #     nodes = ["bone_1_solid", "bone_2_solid", "mandible_final"]
-    #     # nodes = ["bone_1", "bone_2", "mandible_final"]
-
-    #     for name in nodes:
-    #         try:
-    #             node = slicer.util.getNode(name)
-    #             slicer.util.saveNode(node, os.path.join(folder, name + ".stl"))
-    #         except: pass
-
-    # ==========================================================================
-    #  UTILS
-    # ==========================================================================
     def mirror_points_array(self, points, plane_org, plane_norm):
         mirrored = []; n = np.array(plane_norm); o = np.array(plane_org)
         for p in points:
@@ -2160,6 +2144,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             bone_node = slicer.util.getNode('bone_1')
             curve_node = slicer.util.getNode('OC_R')
             cut_node = slicer.util.getNode('cut_1')
+            ribbon_node = slicer.util.getNode('Ribbon_R')
         except:
             print("❌ Lỗi: Thiếu node bone_1, OC_R hoặc cut_1.")
             return
@@ -2202,6 +2187,15 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         clipper_height.SetValue(height)
         clipper_height.SetInsideOut(True) # lay phan nguoc lai
         clipper_height.Update()
+
+        imp_ribbon = vtk.vtkImplicitPolyDataDistance()
+        imp_ribbon.SetInput(ribbon_node.GetPolyData())
+        
+        clipper_ribbon = vtk.vtkClipPolyData()
+        clipper_ribbon.SetInputConnection(clipper_height.GetOutputPort())
+        clipper_ribbon.SetClipFunction(imp_ribbon)
+        clipper_ribbon.SetInsideOut(False) # Đổi thành True nếu máng bị ngược
+        clipper_ribbon.Update()
 
         # 4. TRÍCH XUẤT CURVE THỦ CÔNG (Dùng Control Points)
         points = vtk.vtkPoints()
@@ -2246,16 +2240,16 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         imp_curve = vtk.vtkImplicitPolyDataDistance()
         imp_curve.SetInput(extrude.GetOutput())
         
-        clipper_curve = vtk.vtkClipPolyData()
-        clipper_curve.SetInputData(clipper_height.GetOutput())
-        clipper_curve.SetClipFunction(imp_curve)
-        clipper_curve.SetInsideOut(False) 
-        clipper_curve.Update()
+        clipper_final = vtk.vtkClipPolyData()
+        clipper_final.SetInputConnection(clipper_ribbon.GetOutputPort())
+        clipper_final.SetClipFunction(imp_curve)
+        clipper_final.SetInsideOut(False) 
+        clipper_final.Update()
 
 
         # Đóng nắp lần cuối sau khi cắt bằng Curve
         final_solid = vtk.vtkFillHolesFilter()
-        final_solid.SetInputConnection(clipper_curve.GetOutputPort())
+        final_solid.SetInputConnection(clipper_final.GetOutputPort())
         final_solid.SetHoleSize(1000.0)
         final_solid.Update()
 
@@ -2302,6 +2296,8 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             curve_node = slicer.mrmlScene.GetFirstNodeByName(curve_name)
             cut_node = slicer.mrmlScene.GetFirstNodeByName(cut_name)
             landmark_node = slicer.mrmlScene.GetFirstNodeByName(landmark_name)
+            ribbon_node = slicer.mrmlScene.GetFirstNodeByName('Ribbon_L')
+
             if not all([bone_node, curve_node, cut_node, landmark_node]):
                 print(f" ERROR: Không tìm thấy đủ nodes đầu vào! Vui lòng kiểm tra tên trong Data Panel.")
                 continue
@@ -2345,6 +2341,17 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             dist_lm = imp_cut.EvaluateFunction(p_lm)
             clipper_h.SetInsideOut(dist_lm < height) 
             clipper_h.Update()
+
+            # --- BỔ SUNG: CẮT THEO Ribbon_L ---
+            imp_ribbon = vtk.vtkImplicitPolyDataDistance()
+            imp_ribbon.SetInput(ribbon_node.GetPolyData())
+            
+            clipper_ribbon = vtk.vtkClipPolyData()
+            clipper_ribbon.SetInputConnection(clipper_h.GetOutputPort())
+            clipper_ribbon.SetClipFunction(imp_ribbon)
+            clipper_ribbon.SetInsideOut(False) 
+            clipper_ribbon.Update()
+
             curve_pd = vtk.vtkPolyData()
 
             if hasattr(curve_node, 'GetCurveDisplayPolyData') and curve_node.GetCurveDisplayPolyData():
@@ -2378,7 +2385,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             imp_curve.SetInput(extrude.GetOutput())
             
             clipper_c = vtk.vtkClipPolyData()
-            clipper_c.SetInputData(clipper_h.GetOutput())
+            clipper_c.SetInputConnection(clipper_ribbon.GetOutputPort())
             clipper_c.SetClipFunction(imp_curve)
             
             val_lm_curve = imp_curve.EvaluateFunction(p_lm)
