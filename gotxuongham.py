@@ -2173,7 +2173,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         
         bounds = [0]*6
         bone_pd.GetBounds(bounds)
-        margin = 30.0
+        margin = 5.0
         padded_bounds = [bounds[i] + (margin if i%2 else -margin) for i in range(6)]
         
         sample = vtk.vtkSampleFunction()
@@ -2311,7 +2311,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             
             bounds = [0]*6
             bone_pd.GetBounds(bounds)
-            margin = 15.0 
+            margin = 5.0 
             padded_bounds = [bounds[i] + (margin if i%2 else -margin) for i in range(6)]
             
             sample = vtk.vtkSampleFunction()
