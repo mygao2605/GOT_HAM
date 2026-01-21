@@ -2251,15 +2251,20 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         clipper_curve.SetClipFunction(imp_curve)
         clipper_curve.SetInsideOut(False) 
         clipper_curve.Update()
-        # 1. Bộ lọc WindowedSinc giúp làm mịn nhưng không làm co (shrink) kích thước máng
+
+
+        # Đóng nắp lần cuối sau khi cắt bằng Curve
+        final_solid = vtk.vtkFillHolesFilter()
+        final_solid.SetInputConnection(clipper_curve.GetOutputPort())
+        final_solid.SetHoleSize(1000.0)
+        final_solid.Update()
+
+        # 5. LÀM MƯỢT (SMOOTHING)
         smoother = vtk.vtkWindowedSincPolyDataFilter()
-        smoother.SetInputConnection(clipper_curve.GetOutputPort())
-        smoother.SetNumberOfIterations(20) # Bạn có thể tăng lên 30 nếu muốn mượt hơn
+        smoother.SetInputConnection(final_solid.GetOutputPort())
+        smoother.SetNumberOfIterations(30)
         smoother.BoundarySmoothingOn()
-        smoother.FeatureEdgeSmoothingOff()
-        smoother.SetPassBand(0.1) # Giá trị càng nhỏ càng mượt (thử 0.05 nếu muốn cực mượt)
-        smoother.NonManifoldSmoothingOn()
-        smoother.NormalizeCoordinatesOn()
+        smoother.SetPassBand(0.08)
         smoother.Update()
 
         # 2. Tính toán lại Vector pháp tuyến (Normals) 
@@ -2380,14 +2385,18 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             clipper_c.SetInsideOut(val_lm_curve < 0)
             clipper_c.Update()
 
+            # Đóng nắp lần cuối sau khi cắt bằng Curve
+            final_solid = vtk.vtkFillHolesFilter()
+            final_solid.SetInputConnection(clipper_c.GetOutputPort())
+            final_solid.SetHoleSize(1000.0)
+            final_solid.Update()
+
+            # 5. LÀM MƯỢT (SMOOTHING)
             smoother = vtk.vtkWindowedSincPolyDataFilter()
-            smoother.SetInputConnection(clipper_c.GetOutputPort())
-            smoother.SetNumberOfIterations(25) # Số lần lặp để làm mịn
+            smoother.SetInputConnection(final_solid.GetOutputPort())
+            smoother.SetNumberOfIterations(30)
             smoother.BoundarySmoothingOn()
-            smoother.FeatureEdgeSmoothingOff()
-            smoother.SetPassBand(0.1) # Độ mịn (càng nhỏ càng mượt)
-            smoother.NonManifoldSmoothingOn()
-            smoother.NormalizeCoordinatesOn()
+            smoother.SetPassBand(0.08)
             smoother.Update()
 
             # Tính toán lại Vector pháp tuyến để bề mặt hiển thị bóng mượt
