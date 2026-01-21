@@ -2266,10 +2266,11 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         # Bước này cực kỳ quan trọng để đổ bóng bề mặt trông mượt và bóng, không bị loang lổ
         normals = vtk.vtkPolyDataNormals()
         normals.SetInputConnection(smoother.GetOutputPort())
-        normals.FeatureAngleSmoothingOn()
         normals.SetFeatureAngle(60.0)
-        normals.ConsistencyOn()
-        normals.SplittingOff()
+        normals.SplittingOn()         # Bật chia tách các cạnh sắc
+        normals.ConsistencyOn()       # Đảm bảo hướng các mặt đồng nhất
+        normals.AutoOrientNormalsOn() # Tự động định hướng pháp tuyến ra ngoài
+        normals.ComputePointNormalsOn() # Tính toán pháp tuyến cho điểm để làm mịn
         normals.Update()
 
         # 5. Hiển thị kết quả
@@ -2392,10 +2393,11 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             # Tính toán lại Vector pháp tuyến để bề mặt hiển thị bóng mượt
             normals = vtk.vtkPolyDataNormals()
             normals.SetInputConnection(smoother.GetOutputPort())
-            normals.FeatureAngleSmoothingOn()
             normals.SetFeatureAngle(60.0)
-            normals.ConsistencyOn()
-            normals.SplittingOff()
+            normals.SplittingOn()         # Bật chia tách các cạnh sắc
+            normals.ConsistencyOn()       # Đảm bảo hướng các mặt đồng nhất
+            normals.AutoOrientNormalsOn() # Tự động định hướng pháp tuyến ra ngoài
+            normals.ComputePointNormalsOn() # Tính toán pháp tuyến cho điểm để làm mịn
             normals.Update()
 
             # 4. HIỂN THỊ KẾT QUẢ (SỬA LỖI TẠI ĐÂY)
