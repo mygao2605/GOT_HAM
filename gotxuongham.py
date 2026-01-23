@@ -331,14 +331,14 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
             yaw_val = self.yawSlider.value
             curveNode = self.curveSelector.currentNode()
-            mandibleNode = slicer.util.getNode('Mandible') # ham duoi
-            meNode  = self.get_pos(slicer.util.getNode('Me'))
+            mandibleNode = slicer.util.getNode('Mandible')
+            
 
             # Logic sẽ tự động tìm 'Mandible_Body' (kết quả của genio) để cắt tiếp
             self.logic.run_step_4_create_sheets_and_cut(
                 mandibleNode,
                 yaw_degrees=yaw_val,
-                curveNode=curveNode,me=meNode 
+                curveNode=curveNode
             )
             qt.QMessageBox.information(None, "Xong", f"Đã tạo Ribbon (Yaw={yaw_val}°) và cắt xương thành công.")
         except Exception as e:
@@ -1183,7 +1183,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
     # --------------------------------------------------------------------------
     # BƯỚC 3: TẠO SHEET RIBBON & CẮT V-LINE
     # --------------------------------------------------------------------------
-    def run_step_4_create_sheets_and_cut(self, mandibleNode, yaw_degrees=45.0, curveNode=None, me=None):
+    def run_step_4_create_sheets_and_cut(self, mandibleNode, yaw_degrees=45.0, curveNode=None):
         
         # NOTE: Logic này đã thay thế hoàn toàn logic tạo ribbon đối xứng cũ.
         
