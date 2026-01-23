@@ -65,12 +65,12 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         formLayout.addRow(inputCollapsibleButton)
         inputFormLayout = qt.QFormLayout(inputCollapsibleButton)
 
-        self.mandibleSelector = slicer.qMRMLNodeComboBox()
-        self.mandibleSelector.nodeTypes = ["vtkMRMLModelNode"]
-        self.mandibleSelector.selectNodeUponCreation = True
-        self.mandibleSelector.setMRMLScene(slicer.mrmlScene)
-        self.mandibleSelector.setToolTip("Chọn model xương hàm dưới gốc")
-        inputFormLayout.addRow("Xương hàm dưới:", self.mandibleSelector)
+        # self.mandibleSelector = slicer.qMRMLNodeComboBox()
+        # self.mandibleSelector.nodeTypes = ["vtkMRMLModelNode"]
+        # self.mandibleSelector.selectNodeUponCreation = True
+        # self.mandibleSelector.setMRMLScene(slicer.mrmlScene)
+        # self.mandibleSelector.setToolTip("Chọn model xương hàm dưới gốc")
+        # inputFormLayout.addRow("Xương hàm dưới:", self.mandibleSelector)
 
         # Landmarks MSP
         # self.selectorNa = self.createFiducialSelector("Na (Nasion)")
@@ -80,12 +80,12 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # self.selectorOp = self.createFiducialSelector("Op (Opisthion)")
         # inputFormLayout.addRow("Điểm Op:", self.selectorOp)
         # self.selectorIF = self.createFiducialSelector("IF (Incisive Foramen)")
-        inputFormLayout.addRow("Điểm IF:", self.selectorIF)
-        self.selectorIF.setEnabled(False)
+        # inputFormLayout.addRow("Điểm IF:", self.selectorIF)
+        # self.selectorIF.setEnabled(False)
 
         # Landmarks V-line
-        self.selectorMe = self.createFiducialSelector("Me (Menton)")
-        inputFormLayout.addRow("Điểm Me (Cằm):", self.selectorMe)
+        # self.selectorMe = self.createFiducialSelector("Me (Menton)")
+        # inputFormLayout.addRow("Điểm Me (Cằm):", self.selectorMe)
         
         self.btnStep1 = qt.QPushButton("B1: Tạo MSP và Mirror")
         inputFormLayout.addRow(self.btnStep1)
@@ -433,6 +433,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         pBa = slicer.util.getNode('Ba')
         pOp = slicer.util.getNode('Op')
         pIF = slicer.util.getNode('IF')
+        mandibleNode= slicer.util.getNode('Mandible')
 
         origin, normal = self.fit_plane_svd([pNa, pBa, pOp, pIF])
         
@@ -444,7 +445,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         self.msp_normal = normal
 
         self.create_markups_plane(self.msp_name, origin, normal, size=(250,250))
-        # self.mirror_model(mandibleNode, origin, normal, suffix="_Mirror")
+        self.mirror_model(mandibleNode, origin, normal, suffix="_Mirror")
 
     # --------------------------------------------------------------------------
     # BƯỚC 2 (MỚI): GENIOPLASTY
