@@ -304,8 +304,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             # Lưu ý: Lúc này Me đã bị di chuyển bởi Genioplasty
             # Logic get_pos sẽ tự động lấy toạ độ thế giới mới của Me
             
-            results = self.logic.run_step_2_calculate_go(
-                self.mandibleSelector.currentNode(),
+            results = self.logic.run_step_3_calculate_go(
                 target_angle_deg=target_angle
             )
             
@@ -332,17 +331,14 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
             yaw_val = self.yawSlider.value
             curveNode = self.curveSelector.currentNode()
-            mandibleNode = self.mandibleSelector.currentNode()  # ham duoi
-            meNode  = self.selectorMe.currentNode()
-            
-            pos = [0,0,0]
-            meNode.GetNthControlPointPositionWorld(0, pos)
+            mandibleNode = slicer.util.getNode('Mandible') # ham duoi
+            meNode  = self.get_pos(slicer.util.getNode('Me'))
 
             # Logic sẽ tự động tìm 'Mandible_Body' (kết quả của genio) để cắt tiếp
-            self.logic.run_step_3_create_sheets_and_cut(
+            self.logic.run_step_4_create_sheets_and_cut(
                 mandibleNode,
                 yaw_degrees=yaw_val,
-                curveNode=curveNode,me=pos 
+                curveNode=curveNode,me=meNode 
             )
             qt.QMessageBox.information(None, "Xong", f"Đã tạo Ribbon (Yaw={yaw_val}°) và cắt xương thành công.")
         except Exception as e:
@@ -404,11 +400,18 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
     # --------------------------------------------------------------------------
     def run_step_1_msp(self,mode=3):
 
-        # slicer.util.getNode('OC_R')
-        pNa = slicer.util.getNode('Na')
-        pBa = slicer.util.getNode('Ba')
-        pOp = slicer.util.getNode('Op')
-        pIF = slicer.util.getNode('IF')
+        pNa_node = slicer.util.getNode('N')
+        pBa_node = slicer.util.getNode('Ba')
+        pOp_node = slicer.util.getNode('Op')
+        pIF_node = slicer.util.getNode('IF')
+
+        pNa = self.get_pos(pNa_node)
+        pBa = self.get_pos(pBa_node)
+        pOp = self.get_pos(pOp_node)
+        pIF = self.get_pos(pIF_node)
+
+
+
         mandibleNode= slicer.util.getNode('Mandible')
 
 
@@ -1073,34 +1076,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         node.GetNthControlPointPositionWorld(0, pos)
         return np.array(pos)
 
-    # --------------------------------------------------------------------------
-    # BƯỚC 1: MSP & MIRROR
-    # --------------------------------------------------------------------------
-    # def run_step_1_msp(self, mandibleNode, nodeNa, nodeBa, nodeOp, nodeIF=None, mode=3):
-    #     pNa = self.get_pos(nodeNa)
-    #     pBa = self.get_pos(nodeBa)
-    #     pOp = self.get_pos(nodeOp)
 
-    #     if mode == 3:
-    #         origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
-    #     elif mode == 4 and nodeIF:
-    #         pIF = self.get_pos(nodeIF)
-    #         origin, normal = self.fit_plane_svd([pNa, pBa, pOp, pIF])
-    #     else:
-    #         origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
-
-    #     # Định hướng normal: X > 0 (Right)
-    #     if np.dot(normal, [1,0,0]) < 0: normal = -normal
-        
-    #     self.msp_origin = origin
-    #     self.msp_normal = normal
-
-    #     self.create_markups_plane(self.msp_name, origin, normal, size=(250,250))
-    #     self.mirror_model(mandibleNode, origin, normal, suffix="_Mirror")
-
-    # --------------------------------------------------------------------------
-    # BƯỚC 2: TÍNH TOÁN ĐIỂM GO
-    # --------------------------------------------------------------------------
     def pick_gonion_outer(self, Me, Co, mand_pd, O_msp, N_msp, side_label, target_angle_deg, ratio=2.0):
         # 1. Tính toán khoảng cách lý thuyết
         Y = np.linalg.norm(Co - Me)
@@ -1169,14 +1145,18 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         
         return points[best_idx]
 
-    def run_step_2_calculate_go(self,target_angle_deg=127.0):
+    def run_step_3_calculate_go(self,target_angle_deg=127.0):
         if self.msp_origin is None: raise ValueError("Chưa có MSP. Chạy B1 trước.")
         
-        pMe = slicer.util.getNode('Me')
-        pCoR = slicer.util.getNode('CoR')
-        pCoL = slicer.util.getNode('CoL')
-        pGoR_old=slicer.util.getNode('GoR')
-        pGoL_old=slicer.util.getNode('GoL')
+        pMe = self.get_pos(slicer.util.getNode('Me'))
+        pCoR = self.get_pos(slicer.util.getNode('CoR'))
+        pCoL = self.get_pos(slicer.util.getNode('CoL'))
+        pGoR_old = self.get_pos(slicer.util.getNode('GoR'))
+        pGoL_old = self.get_pos(slicer.util.getNode('GoL'))
+
+
+
+
         mand_pd = self.ensure_normals(slicer.util.getNode('Mandible').GetPolyData())
         results = {}
 
@@ -1203,7 +1183,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
     # --------------------------------------------------------------------------
     # BƯỚC 3: TẠO SHEET RIBBON & CẮT V-LINE
     # --------------------------------------------------------------------------
-    def run_step_3_create_sheets_and_cut(self, mandibleNode, yaw_degrees=45.0, curveNode=None, me=None):
+    def run_step_4_create_sheets_and_cut(self, mandibleNode, yaw_degrees=45.0, curveNode=None, me=None):
         
         # NOTE: Logic này đã thay thế hoàn toàn logic tạo ribbon đối xứng cũ.
         
@@ -1288,7 +1268,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
 
         # 7. TIẾN HÀNH CẮT BOOLEAN
         # Ưu tiên Mandible_Body (sau khi đã cắt genio)
-        mand_node_to_cut = mandibleNode # Mặc định là node gốc
+        mand_node_to_cut = mandibleNode 
         try:
             temp_node = slicer.util.getNode("Mandible_Body")
             if temp_node:
