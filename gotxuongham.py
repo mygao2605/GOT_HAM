@@ -141,14 +141,14 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         paramLayout.addRow("Góc hàm mục tiêu:", self.angleSlider)
 
         # Điểm Lồi cầu
-        self.selectorCoR = self.createFiducialSelector("CoR (Lồi cầu Phải)")
-        paramLayout.addRow("CoR (Phải):", self.selectorCoR)
-        self.selectorCoL = self.createFiducialSelector("CoL (Lồi cầu Trái)")
-        paramLayout.addRow("CoL (Trái):", self.selectorCoL)
-        self.selectorGoR = self.createFiducialSelector("GoR")
-        paramLayout.addRow("GoR (Phải):", self.selectorGoR)
-        self.selectorGoL = self.createFiducialSelector("GoL")
-        paramLayout.addRow("GoL (Trái):", self.selectorGoL)
+        # self.selectorCoR = self.createFiducialSelector("CoR (Lồi cầu Phải)")
+        # paramLayout.addRow("CoR (Phải):", self.selectorCoR)
+        # self.selectorCoL = self.createFiducialSelector("CoL (Lồi cầu Trái)")
+        # paramLayout.addRow("CoL (Trái):", self.selectorCoL)
+        # self.selectorGoR = self.createFiducialSelector("GoR")
+        # paramLayout.addRow("GoR (Phải):", self.selectorGoR)
+        # self.selectorGoL = self.createFiducialSelector("GoL")
+        # paramLayout.addRow("GoL (Trái):", self.selectorGoL)
         
         self.btnStep2 = qt.QPushButton("B3: Tính điểm Go mới")
         paramLayout.addRow(self.btnStep2)
@@ -216,26 +216,26 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._currentMode = 4 if is4Pt else 3
         self.selectorIF.setEnabled(is4Pt)
 
-    def _checkInputs(self, step=1):
-        if not self.mandibleSelector.currentNode():
-            qt.QMessageBox.warning(None, "Thiếu input", "Chưa chọn xương hàm dưới!")
-            return False
-        if step == 1:
-            if not self.selectorNa.currentNode() or not self.selectorBa.currentNode() or not self.selectorOp.currentNode():
-                qt.QMessageBox.warning(None, "Thiếu input", "Chưa chọn đủ Na, Ba, Op!")
-                return False
-        if step >= 2: # Step 2 is Genio now, needs Me
-             if not self.selectorMe.currentNode():
-                qt.QMessageBox.warning(None, "Thiếu input", "Cần điểm Me!")
-                return False
-        if step >= 3: # Calc Go needs Co
-            if not self.selectorCoR.currentNode() and not self.selectorCoL.currentNode():
-                qt.QMessageBox.warning(None, "Thiếu input", "Cần ít nhất một điểm Co!")
-                return False
-        return True
+    # def _checkInputs(self, step=1):
+    #     # if not self.mandibleSelector.currentNode():
+    #     #     qt.QMessageBox.warning(None, "Thiếu input", "Chưa chọn xương hàm dưới!")
+    #     #     return False
+    #     # if step == 1:
+    #     #     if not self.selectorNa.currentNode() or not self.selectorBa.currentNode() or not self.selectorOp.currentNode():
+    #     #         qt.QMessageBox.warning(None, "Thiếu input", "Chưa chọn đủ Na, Ba, Op!")
+    #     #         return False
+    #     # if step >= 2: # Step 2 is Genio now, needs Me
+    #     #      if not self.selectorMe.currentNode():
+    #     #         qt.QMessageBox.warning(None, "Thiếu input", "Cần điểm Me!")
+    #     #         return False
+    #     # if step >= 3: # Calc Go needs Co
+    #     #     if not self.selectorCoR.currentNode() and not self.selectorCoL.currentNode():
+    #     #         qt.QMessageBox.warning(None, "Thiếu input", "Cần ít nhất một điểm Co!")
+    #     #         return False
+    #     return True
 
     def onStep1(self):
-        if not self._checkInputs(1): return
+        # if not self._checkInputs(1): return
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
             self.logic.run_step_1_msp()
@@ -313,7 +313,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # --- CALC GO HANDLERS (NEW B3) ---
     def onStep2(self):
-        if not self._checkInputs(3): return
+        # if not self._checkInputs(3): return
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
             target_angle = self.angleSlider.value
@@ -322,12 +322,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             # Logic get_pos sẽ tự động lấy toạ độ thế giới mới của Me
             
             results = self.logic.run_step_2_calculate_go(
-                self.mandibleSelector.currentNode(), # Dùng để lấy mesh tính toán, nhưng sẽ dùng Mandible_Body nếu có
-                self.selectorMe.currentNode(),
-                self.selectorCoR.currentNode(),
-                self.selectorCoL.currentNode(),
-                self.selectorGoR.currentNode(),
-                self.selectorGoL.currentNode(),
+                self.mandibleSelector.currentNode(),
                 target_angle_deg=target_angle
             )
             
@@ -356,7 +351,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
             yaw_val = self.yawSlider.value
             curveNode = self.curveSelector.currentNode()
-            mandibleNode = self.mandibleSelector.currentNode()
+            mandibleNode = self.mandibleSelector.currentNode()  # ham duoi
             meNode  = self.selectorMe.currentNode()
             
             pos = [0,0,0]
@@ -1189,15 +1184,15 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         
         return points[best_idx]
 
-    def run_step_2_calculate_go(self, mandibleNode, nodeMe, nodeCoR, nodeCoL,nodeGoR, nodeGoL, target_angle_deg=127.0):
+    def run_step_2_calculate_go(self,target_angle_deg=127.0):
         if self.msp_origin is None: raise ValueError("Chưa có MSP. Chạy B1 trước.")
         
-        pMe = self.get_pos(nodeMe)
-        pCoR = self.get_pos(nodeCoR)
-        pCoL = self.get_pos(nodeCoL)
-        pGoR_old=self.get_pos(nodeGoR)
-        pGoL_old=self.get_pos(nodeGoL)
-        mand_pd = self.ensure_normals(mandibleNode.GetPolyData())
+        pMe = slicer.util.getNode('Me')
+        pCoR = slicer.util.getNode('CoR')
+        pCoL = slicer.util.getNode('CoL')
+        pGoR_old=slicer.util.getNode('GoR')
+        pGoL_old=slicer.util.getNode('GoL')
+        mand_pd = self.ensure_normals(slicer.util.getNode('Mandible').GetPolyData())
         results = {}
 
         if pCoR is not None:
