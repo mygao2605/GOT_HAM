@@ -61,44 +61,33 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # --- SECTION 1: INPUT DATA ---
         inputCollapsibleButton = ctk.ctkCollapsibleButton()
-        inputCollapsibleButton.text = "1. Dữ liệu đầu vào"
+        inputCollapsibleButton.text = "1. Tạo MSP và Mirror"
         formLayout.addRow(inputCollapsibleButton)
         inputFormLayout = qt.QFormLayout(inputCollapsibleButton)
-
-        self.mandibleSelector = slicer.qMRMLNodeComboBox()
-        self.mandibleSelector.nodeTypes = ["vtkMRMLModelNode"]
-        self.mandibleSelector.selectNodeUponCreation = True
-        self.mandibleSelector.setMRMLScene(slicer.mrmlScene)
-        self.mandibleSelector.setToolTip("Chọn model xương hàm dưới gốc")
-        inputFormLayout.addRow("Xương hàm dưới:", self.mandibleSelector)
-
-        # Landmarks MSP
-        self.selectorNa = self.createFiducialSelector("Na (Nasion)")
-        inputFormLayout.addRow("Điểm N:", self.selectorNa)
-        self.selectorBa = self.createFiducialSelector("Ba (Basion)")
-        inputFormLayout.addRow("Điểm Ba:", self.selectorBa)
-        self.selectorOp = self.createFiducialSelector("Op (Opisthion)")
-        inputFormLayout.addRow("Điểm Op:", self.selectorOp)
-        self.selectorIF = self.createFiducialSelector("IF (Incisive Foramen)")
-        inputFormLayout.addRow("Điểm IF:", self.selectorIF)
-        self.selectorIF.setEnabled(False)
-
-        # Landmarks V-line
-        self.selectorMe = self.createFiducialSelector("Me (Menton)")
-        inputFormLayout.addRow("Điểm Me (Cằm):", self.selectorMe)
         
-        self.btnStep1 = qt.QPushButton("B1: Tạo MSP và Mirror")
+        self.btnStep1 = qt.QPushButton("Create")
+        self.btnStep1.setStyleSheet("background-color: #ffcccc; font-weight: bold")
         inputFormLayout.addRow(self.btnStep1)
+
+
+        # --- SECTION 1: INPUT DATA ---
+        inputCollapsibleButton = ctk.ctkCollapsibleButton()
+        inputCollapsibleButton.text = "2. Tính khoảng cách và góc"
+        formLayout.addRow(inputCollapsibleButton)
+        inputFormLayout = qt.QFormLayout(inputCollapsibleButton)
+        
+        self.btnStep2 = qt.QPushButton("Calculate")
+        self.btnStep2.setStyleSheet("background-color: #ffcccc; font-weight: bold")
+        inputFormLayout.addRow(self.btnStep2)
 
         # --- SECTION 2: GENIOPLASTY (TRƯỢT CẰM) ---
         genioCollapsibleButton = ctk.ctkCollapsibleButton()
-        genioCollapsibleButton.text = "2. Genioplasty (Trượt cằm trước)"
+        genioCollapsibleButton.text = "3. Genioplasty (Trượt cằm trước)"
         formLayout.addRow(genioCollapsibleButton)
         genioFormLayout = qt.QFormLayout(genioCollapsibleButton)
 
         # B2.1: Chọn đường cắt L (Tương tự OC)
         self.lCutCurveSelector = slicer.qMRMLNodeComboBox()
-        # Cho phép chọn cả Đường cong (Curve) và Đường thẳng (Line)
         self.lCutCurveSelector.nodeTypes = ["vtkMRMLMarkupsCurveNode", "vtkMRMLMarkupsLineNode"]
         self.lCutCurveSelector.setMRMLScene(slicer.mrmlScene)
         self.lCutCurveSelector.addEnabled = True
@@ -106,13 +95,16 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.lCutCurveSelector.setToolTip("Chọn đường xác định vị trí L-cut.")
         genioFormLayout.addRow("Đường cắt L (Curve/Line):", self.lCutCurveSelector)
 
-        self.btnMirrorLCut = qt.QPushButton("Đối xứng đường L-cut (R -> L)")
+        self.btnMirrorLCut = qt.QPushButton("B3.1: Đối xứng đường L-cut (R -> L)")
+        self.btnMirrorLCut.setStyleSheet("background-color: #ffcccc; font-weight: bold")
         genioFormLayout.addRow(self.btnMirrorLCut)
         self.btnMirrorLCut.connect('clicked(bool)', self.onMirrorLCut)
 
-        self.btnInitGenio = qt.QPushButton("B2.2: Tạo mặt phẳng cắt cằm")
-        self.btnExecGenio = qt.QPushButton("B2.3: Cắt & Trượt cằm")
+        self.btnInitGenio = qt.QPushButton("B3.2: Tạo mặt phẳng cắt cằm")
+        self.btnInitGenio.setStyleSheet("background-color: #ffcccc; font-weight: bold")
+        self.btnExecGenio = qt.QPushButton("B3.3: Cắt & Trượt cằm")
         self.btnExecGenio.setStyleSheet("background-color: #ffcccc; font-weight: bold")
+        
 
         genioLabel = qt.QLabel("Lưu ý: Sau khi cắt, hãy kéo Widget để trượt xương.\nĐiểm Me sẽ tự động di chuyển theo mảnh cằm.")
         genioLabel.setStyleSheet("font-style: italic; color: #555;")
@@ -127,7 +119,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # --- SECTION 3: TÍNH TOÁN GO (SAU KHI TRƯỢT CẰM) ---
         paramCollapsibleButton = ctk.ctkCollapsibleButton()
-        paramCollapsibleButton.text = "3. Tính toán Go (Dựa trên Me mới)"
+        paramCollapsibleButton.text = "4. Tính toán Go (Dựa trên Me mới)"
         formLayout.addRow(paramCollapsibleButton)
         paramLayout = qt.QFormLayout(paramCollapsibleButton)
 
@@ -141,21 +133,22 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         paramLayout.addRow("Góc hàm mục tiêu:", self.angleSlider)
 
         # Điểm Lồi cầu
-        self.selectorCoR = self.createFiducialSelector("CoR (Lồi cầu Phải)")
-        paramLayout.addRow("CoR (Phải):", self.selectorCoR)
-        self.selectorCoL = self.createFiducialSelector("CoL (Lồi cầu Trái)")
-        paramLayout.addRow("CoL (Trái):", self.selectorCoL)
-        self.selectorGoR = self.createFiducialSelector("GoR")
-        paramLayout.addRow("GoR (Phải):", self.selectorGoR)
-        self.selectorGoL = self.createFiducialSelector("GoL")
-        paramLayout.addRow("GoL (Trái):", self.selectorGoL)
+        # self.selectorCoR = self.createFiducialSelector("CoR (Lồi cầu Phải)")
+        # paramLayout.addRow("CoR (Phải):", self.selectorCoR)
+        # self.selectorCoL = self.createFiducialSelector("CoL (Lồi cầu Trái)")
+        # paramLayout.addRow("CoL (Trái):", self.selectorCoL)
+        # self.selectorGoR = self.createFiducialSelector("GoR")
+        # paramLayout.addRow("GoR (Phải):", self.selectorGoR)
+        # self.selectorGoL = self.createFiducialSelector("GoL")
+        # paramLayout.addRow("GoL (Trái):", self.selectorGoL)
         
-        self.btnStep2 = qt.QPushButton("B3: Tính điểm Go mới")
-        paramLayout.addRow(self.btnStep2)
+        self.btnStep3 = qt.QPushButton("Tính điểm Go mới")
+        self.btnStep3.setStyleSheet("background-color: #ffcccc; font-weight: bold")
+        paramLayout.addRow(self.btnStep3)
 
         # --- SECTION 4: V-LINE CUT ---
         actionsCollapsibleButton = ctk.ctkCollapsibleButton()
-        actionsCollapsibleButton.text = "4. Cắt V-Line (Gọt hàm)"
+        actionsCollapsibleButton.text = "5. Cắt V-Line (Gọt hàm)"
         formLayout.addRow(actionsCollapsibleButton)
         actionsFormLayout = qt.QFormLayout(actionsCollapsibleButton)
 
@@ -173,19 +166,22 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.yawSlider.suffix = " °"
         actionsFormLayout.addRow("Góc nghiêng cắt (Yaw):", self.yawSlider)
 
-        self.btnStep3 = qt.QPushButton("B4: Tạo mặt cắt & Cắt xương")
-        actionsFormLayout.addRow(self.btnStep3)
+        self.btnStep4 = qt.QPushButton("Tạo mặt cắt & Cắt xương")
+        self.btnStep4.setStyleSheet("background-color: #ffcccc; font-weight: bold")
+        actionsFormLayout.addRow(self.btnStep4)
 
         # --- SECTION 5: GUIDE & EXPORT ---
         exportCollapsibleButton = ctk.ctkCollapsibleButton()
-        exportCollapsibleButton.text = "5. Guide & Xuất file"
+        exportCollapsibleButton.text = "6. Guide & Xuất file"
         formLayout.addRow(exportCollapsibleButton)
         exportFormLayout = qt.QFormLayout(exportCollapsibleButton)
 
-        self.btnStep4 = qt.QPushButton("B5: Tạo máng (Band Guide)")
-        self.btnStep5 = qt.QPushButton("B6: Xuất STL")
-        exportFormLayout.addRow(self.btnStep4)
+        self.btnStep5 = qt.QPushButton("Tạo máng (Band Guide)")
+        self.btnStep5.setStyleSheet("background-color: #ffcccc; font-weight: bold")
+        self.btnStep6 = qt.QPushButton("Xuất STL")
+        self.btnStep6.setStyleSheet("background-color: #ffcccc; font-weight: bold")
         exportFormLayout.addRow(self.btnStep5)
+        exportFormLayout.addRow(self.btnStep6)
 
 
         # Connect signals
@@ -194,6 +190,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.btnStep3.connect('clicked(bool)', self.onStep3)
         self.btnStep4.connect('clicked(bool)', self.onStep4)
         self.btnStep5.connect('clicked(bool)', self.onStep5)
+        self.btnStep6.connect('clicked(bool)', self.onStep6)
         
         # Connect Genio signals
         self.btnInitGenio.connect('clicked(bool)', self.onInitGenio)
@@ -214,44 +211,22 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def onModeChanged(self):
         is4Pt = self.radio4pt.isChecked()
         self._currentMode = 4 if is4Pt else 3
-        self.selectorIF.setEnabled(is4Pt)
+        # self.selectorIF.setEnabled(is4Pt)
 
-    def _checkInputs(self, step=1):
-        if not self.mandibleSelector.currentNode():
-            qt.QMessageBox.warning(None, "Thiếu input", "Chưa chọn xương hàm dưới!")
-            return False
-        if step == 1:
-            if not self.selectorNa.currentNode() or not self.selectorBa.currentNode() or not self.selectorOp.currentNode():
-                qt.QMessageBox.warning(None, "Thiếu input", "Chưa chọn đủ Na, Ba, Op!")
-                return False
-        if step >= 2: # Step 2 is Genio now, needs Me
-             if not self.selectorMe.currentNode():
-                qt.QMessageBox.warning(None, "Thiếu input", "Cần điểm Me!")
-                return False
-        if step >= 3: # Calc Go needs Co
-            if not self.selectorCoR.currentNode() and not self.selectorCoL.currentNode():
-                qt.QMessageBox.warning(None, "Thiếu input", "Cần ít nhất một điểm Co!")
-                return False
-        return True
 
     def onStep1(self):
-        if not self._checkInputs(1): return
+        # if not self._checkInputs(1): return
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-            nodeIF = self.selectorIF.currentNode() if self._currentMode == 4 else None
-            self.logic.run_step_1_msp(
-                self.mandibleSelector.currentNode(),
-                self.selectorNa.currentNode(),
-                self.selectorBa.currentNode(),
-                self.selectorOp.currentNode(),
-                nodeIF,
-                mode=self._currentMode
-            )
+            self.logic.run_step_1_msp(mode=self._currentMode)
             qt.QMessageBox.information(None, "Xong", "Đã tạo MSP và Mirror.")
         except Exception as e:
             qt.QMessageBox.critical(None, "Lỗi B1", str(e))
         finally:
             qt.QApplication.restoreOverrideCursor()
+
+    def onStep2(self):
+        return True
 
     # --- GENIOPLASTY HANDLERS (NEW B2) ---
     def onMirrorLCut(self):
@@ -320,8 +295,8 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             qt.QApplication.restoreOverrideCursor()
 
     # --- CALC GO HANDLERS (NEW B3) ---
-    def onStep2(self):
-        if not self._checkInputs(3): return
+    def onStep3(self):
+        # if not self._checkInputs(3): return
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
             target_angle = self.angleSlider.value
@@ -329,13 +304,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             # Lưu ý: Lúc này Me đã bị di chuyển bởi Genioplasty
             # Logic get_pos sẽ tự động lấy toạ độ thế giới mới của Me
             
-            results = self.logic.run_step_2_calculate_go(
-                self.mandibleSelector.currentNode(), # Dùng để lấy mesh tính toán, nhưng sẽ dùng Mandible_Body nếu có
-                self.selectorMe.currentNode(),
-                self.selectorCoR.currentNode(),
-                self.selectorCoL.currentNode(),
-                self.selectorGoR.currentNode(),
-                self.selectorGoL.currentNode(),
+            results = self.logic.run_step_3_calculate_go(
                 target_angle_deg=target_angle
             )
             
@@ -348,9 +317,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         finally:
             qt.QApplication.restoreOverrideCursor()
 
-    # --- V-LINE CUT HANDLERS (NEW B4) ---
-    def onStep3(self):
-        # Step 4 logic
+    def onStep4(self):
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
             
@@ -364,17 +331,14 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
             yaw_val = self.yawSlider.value
             curveNode = self.curveSelector.currentNode()
-            mandibleNode = self.mandibleSelector.currentNode()
-            meNode  = self.selectorMe.currentNode()
+            mandibleNode = slicer.util.getNode('Mandible')
             
-            pos = [0,0,0]
-            meNode.GetNthControlPointPositionWorld(0, pos)
 
             # Logic sẽ tự động tìm 'Mandible_Body' (kết quả của genio) để cắt tiếp
-            self.logic.run_step_3_create_sheets_and_cut(
+            self.logic.run_step_4_create_sheets_and_cut(
                 mandibleNode,
                 yaw_degrees=yaw_val,
-                curveNode=curveNode,me=pos 
+                curveNode=curveNode
             )
             qt.QMessageBox.information(None, "Xong", f"Đã tạo Ribbon (Yaw={yaw_val}°) và cắt xương thành công.")
         except Exception as e:
@@ -382,7 +346,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         finally:
             qt.QApplication.restoreOverrideCursor()
 
-    def onStep4(self):
+    def onStep5(self):
         """Bước 5: Tạo máng hướng dẫn hiển thị trên màn hình 3D."""
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
@@ -404,7 +368,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         finally:
             qt.QApplication.restoreOverrideCursor()
 
-    def onStep5(self):
+    def onStep6(self):
         outputFolder = qt.QFileDialog.getExistingDirectory(None, "Chọn thư mục lưu STL")
         if not outputFolder: return
         try:
@@ -434,18 +398,28 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
     # --------------------------------------------------------------------------
     # BƯỚC 1: MSP & MIRROR
     # --------------------------------------------------------------------------
-    def run_step_1_msp(self, mandibleNode, nodeNa, nodeBa, nodeOp, nodeIF=None, mode=3):
-        pNa = self.get_pos(nodeNa)
-        pBa = self.get_pos(nodeBa)
-        pOp = self.get_pos(nodeOp)
+    def run_step_1_msp(self,mode=3):
+
+        pNa_node = slicer.util.getNode('N')
+        pBa_node = slicer.util.getNode('Ba')
+        pOp_node = slicer.util.getNode('Op')
+        pIF_node = slicer.util.getNode('IF')
+
+        pNa = self.get_pos(pNa_node)
+        pBa = self.get_pos(pBa_node)
+        pOp = self.get_pos(pOp_node)
+        pIF = self.get_pos(pIF_node)
+
+
+
+        mandibleNode= slicer.util.getNode('Mandible')
+
 
         if mode == 3:
             origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
-        elif mode == 4 and nodeIF:
-            pIF = self.get_pos(nodeIF)
+        elif mode == 4:
             origin, normal = self.fit_plane_svd([pNa, pBa, pOp, pIF])
-        else:
-            origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
+        
 
         # Định hướng normal: X > 0 (Right)
         if np.dot(normal, [1,0,0]) < 0: normal = -normal
@@ -1102,34 +1076,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         node.GetNthControlPointPositionWorld(0, pos)
         return np.array(pos)
 
-    # --------------------------------------------------------------------------
-    # BƯỚC 1: MSP & MIRROR
-    # --------------------------------------------------------------------------
-    def run_step_1_msp(self, mandibleNode, nodeNa, nodeBa, nodeOp, nodeIF=None, mode=3):
-        pNa = self.get_pos(nodeNa)
-        pBa = self.get_pos(nodeBa)
-        pOp = self.get_pos(nodeOp)
 
-        if mode == 3:
-            origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
-        elif mode == 4 and nodeIF:
-            pIF = self.get_pos(nodeIF)
-            origin, normal = self.fit_plane_svd([pNa, pBa, pOp, pIF])
-        else:
-            origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
-
-        # Định hướng normal: X > 0 (Right)
-        if np.dot(normal, [1,0,0]) < 0: normal = -normal
-        
-        self.msp_origin = origin
-        self.msp_normal = normal
-
-        self.create_markups_plane(self.msp_name, origin, normal, size=(250,250))
-        self.mirror_model(mandibleNode, origin, normal, suffix="_Mirror")
-
-    # --------------------------------------------------------------------------
-    # BƯỚC 2: TÍNH TOÁN ĐIỂM GO
-    # --------------------------------------------------------------------------
     def pick_gonion_outer(self, Me, Co, mand_pd, O_msp, N_msp, side_label, target_angle_deg, ratio=2.0):
         # 1. Tính toán khoảng cách lý thuyết
         Y = np.linalg.norm(Co - Me)
@@ -1198,15 +1145,19 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         
         return points[best_idx]
 
-    def run_step_2_calculate_go(self, mandibleNode, nodeMe, nodeCoR, nodeCoL,nodeGoR, nodeGoL, target_angle_deg=127.0):
+    def run_step_3_calculate_go(self,target_angle_deg=127.0):
         if self.msp_origin is None: raise ValueError("Chưa có MSP. Chạy B1 trước.")
         
-        pMe = self.get_pos(nodeMe)
-        pCoR = self.get_pos(nodeCoR)
-        pCoL = self.get_pos(nodeCoL)
-        pGoR_old=self.get_pos(nodeGoR)
-        pGoL_old=self.get_pos(nodeGoL)
-        mand_pd = self.ensure_normals(mandibleNode.GetPolyData())
+        pMe = self.get_pos(slicer.util.getNode('Me'))
+        pCoR = self.get_pos(slicer.util.getNode('CoR'))
+        pCoL = self.get_pos(slicer.util.getNode('CoL'))
+        pGoR_old = self.get_pos(slicer.util.getNode('GoR'))
+        pGoL_old = self.get_pos(slicer.util.getNode('GoL'))
+
+
+
+
+        mand_pd = self.ensure_normals(slicer.util.getNode('Mandible').GetPolyData())
         results = {}
 
         if pCoR is not None:
@@ -1232,7 +1183,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
     # --------------------------------------------------------------------------
     # BƯỚC 3: TẠO SHEET RIBBON & CẮT V-LINE
     # --------------------------------------------------------------------------
-    def run_step_3_create_sheets_and_cut(self, mandibleNode, yaw_degrees=45.0, curveNode=None, me=None):
+    def run_step_4_create_sheets_and_cut(self, mandibleNode, yaw_degrees=45.0, curveNode=None):
         
         # NOTE: Logic này đã thay thế hoàn toàn logic tạo ribbon đối xứng cũ.
         
@@ -1317,7 +1268,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
 
         # 7. TIẾN HÀNH CẮT BOOLEAN
         # Ưu tiên Mandible_Body (sau khi đã cắt genio)
-        mand_node_to_cut = mandibleNode # Mặc định là node gốc
+        mand_node_to_cut = mandibleNode 
         try:
             temp_node = slicer.util.getNode("Mandible_Body")
             if temp_node:
@@ -2105,8 +2056,6 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         if len(all_points) < 3:
             raise ValueError("Không đủ điểm để tạo mặt phẳng (cần ít nhất 3 điểm).")
 
-        # 2. Sử dụng hàm fit_plane_svd đã có trong code của bạn để tìm tâm và pháp tuyến
-        # Hàm này tính toán mặt phẳng khớp nhất với tập hợp điểm
         center, normal = self.fit_plane_svd(all_points)
 
         # 3. Định hướng lại pháp tuyến (Normal) 
