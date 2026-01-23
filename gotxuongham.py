@@ -73,13 +73,13 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         inputFormLayout.addRow("Xương hàm dưới:", self.mandibleSelector)
 
         # Landmarks MSP
-        self.selectorNa = self.createFiducialSelector("Na (Nasion)")
-        inputFormLayout.addRow("Điểm N:", self.selectorNa)
-        self.selectorBa = self.createFiducialSelector("Ba (Basion)")
-        inputFormLayout.addRow("Điểm Ba:", self.selectorBa)
-        self.selectorOp = self.createFiducialSelector("Op (Opisthion)")
-        inputFormLayout.addRow("Điểm Op:", self.selectorOp)
-        self.selectorIF = self.createFiducialSelector("IF (Incisive Foramen)")
+        # self.selectorNa = self.createFiducialSelector("Na (Nasion)")
+        # inputFormLayout.addRow("Điểm N:", self.selectorNa)
+        # self.selectorBa = self.createFiducialSelector("Ba (Basion)")
+        # inputFormLayout.addRow("Điểm Ba:", self.selectorBa)
+        # self.selectorOp = self.createFiducialSelector("Op (Opisthion)")
+        # inputFormLayout.addRow("Điểm Op:", self.selectorOp)
+        # self.selectorIF = self.createFiducialSelector("IF (Incisive Foramen)")
         inputFormLayout.addRow("Điểm IF:", self.selectorIF)
         self.selectorIF.setEnabled(False)
 
@@ -238,15 +238,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if not self._checkInputs(1): return
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-            nodeIF = self.selectorIF.currentNode() if self._currentMode == 4 else None
-            self.logic.run_step_1_msp(
-                self.mandibleSelector.currentNode(),
-                self.selectorNa.currentNode(),
-                self.selectorBa.currentNode(),
-                self.selectorOp.currentNode(),
-                nodeIF,
-                mode=self._currentMode
-            )
+            self.logic.run_step_1_msp()
             qt.QMessageBox.information(None, "Xong", "Đã tạo MSP và Mirror.")
         except Exception as e:
             qt.QMessageBox.critical(None, "Lỗi B1", str(e))
@@ -434,18 +426,16 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
     # --------------------------------------------------------------------------
     # BƯỚC 1: MSP & MIRROR
     # --------------------------------------------------------------------------
-    def run_step_1_msp(self, mandibleNode, nodeNa, nodeBa, nodeOp, nodeIF=None, mode=3):
-        pNa = self.get_pos(nodeNa)
-        pBa = self.get_pos(nodeBa)
-        pOp = self.get_pos(nodeOp)
+    def run_step_1_msp(self):
 
-        if mode == 3:
-            origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
-        elif mode == 4 and nodeIF:
-            pIF = self.get_pos(nodeIF)
-            origin, normal = self.fit_plane_svd([pNa, pBa, pOp, pIF])
-        else:
-            origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
+        # slicer.util.getNode('OC_R')
+        pNa = slicer.util.getNode('Na')
+        pBa = slicer.util.getNode('Ba')
+        pOp = slicer.util.getNode('Op')
+        pIF = slicer.util.getNode('IF')
+
+        origin, normal = self.fit_plane_svd([pNa, pBa, pOp, pIF])
+        
 
         # Định hướng normal: X > 0 (Right)
         if np.dot(normal, [1,0,0]) < 0: normal = -normal
@@ -454,7 +444,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         self.msp_normal = normal
 
         self.create_markups_plane(self.msp_name, origin, normal, size=(250,250))
-        self.mirror_model(mandibleNode, origin, normal, suffix="_Mirror")
+        # self.mirror_model(mandibleNode, origin, normal, suffix="_Mirror")
 
     # --------------------------------------------------------------------------
     # BƯỚC 2 (MỚI): GENIOPLASTY
@@ -1105,27 +1095,27 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
     # --------------------------------------------------------------------------
     # BƯỚC 1: MSP & MIRROR
     # --------------------------------------------------------------------------
-    def run_step_1_msp(self, mandibleNode, nodeNa, nodeBa, nodeOp, nodeIF=None, mode=3):
-        pNa = self.get_pos(nodeNa)
-        pBa = self.get_pos(nodeBa)
-        pOp = self.get_pos(nodeOp)
+    # def run_step_1_msp(self, mandibleNode, nodeNa, nodeBa, nodeOp, nodeIF=None, mode=3):
+    #     pNa = self.get_pos(nodeNa)
+    #     pBa = self.get_pos(nodeBa)
+    #     pOp = self.get_pos(nodeOp)
 
-        if mode == 3:
-            origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
-        elif mode == 4 and nodeIF:
-            pIF = self.get_pos(nodeIF)
-            origin, normal = self.fit_plane_svd([pNa, pBa, pOp, pIF])
-        else:
-            origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
+    #     if mode == 3:
+    #         origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
+    #     elif mode == 4 and nodeIF:
+    #         pIF = self.get_pos(nodeIF)
+    #         origin, normal = self.fit_plane_svd([pNa, pBa, pOp, pIF])
+    #     else:
+    #         origin, normal = self.plane_from_three_points(pNa, pBa, pOp)
 
-        # Định hướng normal: X > 0 (Right)
-        if np.dot(normal, [1,0,0]) < 0: normal = -normal
+    #     # Định hướng normal: X > 0 (Right)
+    #     if np.dot(normal, [1,0,0]) < 0: normal = -normal
         
-        self.msp_origin = origin
-        self.msp_normal = normal
+    #     self.msp_origin = origin
+    #     self.msp_normal = normal
 
-        self.create_markups_plane(self.msp_name, origin, normal, size=(250,250))
-        self.mirror_model(mandibleNode, origin, normal, suffix="_Mirror")
+    #     self.create_markups_plane(self.msp_name, origin, normal, size=(250,250))
+    #     self.mirror_model(mandibleNode, origin, normal, suffix="_Mirror")
 
     # --------------------------------------------------------------------------
     # BƯỚC 2: TÍNH TOÁN ĐIỂM GO
