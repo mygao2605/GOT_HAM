@@ -71,14 +71,63 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
         # --- SECTION 1: INPUT DATA ---
+        # --- SECTION 2: DISTANCE & ANGLE ---
         inputCollapsibleButton = ctk.ctkCollapsibleButton()
         inputCollapsibleButton.text = "2. Tính khoảng cách và góc"
         formLayout.addRow(inputCollapsibleButton)
         inputFormLayout = qt.QFormLayout(inputCollapsibleButton)
-        
+
+        # Button create Frankfort plane
+        self.btnCreateFrankfort = qt.QPushButton("Create Frankfort Plane")
+        self.btnCreateFrankfort.setStyleSheet("background-color: #ccffcc; font-weight: bold")
+        self.btnCreateFrankfort.clicked.connect(self.onCreateFrankfortPlane)
+
+        # Point selector
+        self.pointSelector = slicer.qMRMLNodeComboBox()
+        self.pointSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+        self.pointSelector.noneEnabled = True
+        self.pointSelector.setMRMLScene(slicer.mrmlScene)
+
+        # Plane selector
+        self.planeSelector = slicer.qMRMLNodeComboBox()
+        self.planeSelector.nodeTypes = ["vtkMRMLMarkupsPlaneNode"]
+        self.planeSelector.noneEnabled = True
+        self.planeSelector.setMRMLScene(slicer.mrmlScene)
+
+        self.plane2Selector = slicer.qMRMLNodeComboBox()
+        self.plane2Selector.nodeTypes = ["vtkMRMLMarkupsPlaneNode"]
+        self.plane2Selector.noneEnabled = True
+        self.plane2Selector.setMRMLScene(slicer.mrmlScene)
+
+
+        # Line selector
+        self.lineSelector = slicer.qMRMLNodeComboBox()
+        self.lineSelector.nodeTypes = ["vtkMRMLMarkupsLineNode"]
+        self.lineSelector.noneEnabled = True
+        self.lineSelector.setMRMLScene(slicer.mrmlScene)
+
+        # Second plane selector
+
+
+
+        # Result label
+        self.resultLabel = qt.QLabel("Distance: — mm\nAngle: — °")
+        self.resultLabel.setStyleSheet("font-weight: bold; font-size: 13px")
+
+        # Button
         self.btnStep2 = qt.QPushButton("Calculate")
         self.btnStep2.setStyleSheet("background-color: #ffcccc; font-weight: bold")
+        self.btnStep2.clicked.connect(self.onCalculate)
+
+        # Layout
+        inputFormLayout.addRow(self.btnCreateFrankfort)
+        inputFormLayout.addRow("Point:", self.pointSelector)
+        inputFormLayout.addRow("Plane A:", self.planeSelector)
+        inputFormLayout.addRow("Plane B:", self.plane2Selector)
+        inputFormLayout.addRow("Line:", self.lineSelector)
         inputFormLayout.addRow(self.btnStep2)
+        inputFormLayout.addRow(self.resultLabel)
+
 
         # --- SECTION 2: GENIOPLASTY (TRƯỢT CẰM) ---
         genioCollapsibleButton = ctk.ctkCollapsibleButton()
@@ -197,6 +246,93 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.btnExecGenio.connect('clicked(bool)', self.onExecGenio)
 
         self.layout.addStretch(1)
+
+    def onCreateFrankfortPlane(self):
+
+        try:
+            planeNode = slicer.util.getNode("Frankfort")
+        except:
+            planeNode = slicer.mrmlScene.AddNewNodeByClass(
+                "vtkMRMLMarkupsPlaneNode", "Frankfort"
+            )
+
+        # Lấy các landmark (đúng tên node)
+        pPoL_node = slicer.util.getNode('PoL')
+        pPoR_node = slicer.util.getNode('PoR')
+        pOrL_node = slicer.util.getNode('OrL')
+        pOrR_node = slicer.util.getNode('OrR')
+
+        # Lấy tọa độ (dùng hàm có sẵn của bạn)
+        pPoL = self.get_pos(pPoL_node)
+        pPoR = self.get_pos(pPoR_node)
+        pOrL = self.get_pos(pOrL_node)
+        pOrR = self.get_pos(pOrR_node)
+
+        # Fit plane (dùng logic có sẵn)
+        origin, normal = self.fit_plane_svd([pPoL, pPoR, pOrL, pOrR])
+
+        # Gán cho Markups Plane
+        planeNode.SetOriginWorld(origin.tolist())
+        planeNode.SetNormalWorld(normal.tolist())
+        planeNode.SetDisplayVisibility(True)
+
+        # Auto select trong GUI
+        self.planeSelector.setCurrentNode(planeNode)
+
+        slicer.util.infoDisplay("Frankfort plane created from PoL, PoR, OrL, OrR")
+
+    def onCalculate(self):
+
+        lineA = self.lineSelector.currentNode()
+        planeA = self.planeSelector.currentNode()
+        planeB = self.plane2Selector.currentNode()
+
+        # Validate
+        if not lineA or not planeA or not planeB:
+            slicer.util.errorDisplay("Please select Line A, Plane A and Plane B")
+            return
+
+        if lineA.GetNumberOfControlPoints() < 2:
+            slicer.util.errorDisplay("Line A needs 2 points")
+            return
+
+        # Vector line A
+        p1 = np.array(lineA.GetNthControlPointPositionWorld(0))
+        p2 = np.array(lineA.GetNthControlPointPositionWorld(1))
+        v = p2 - p1
+        v = v / np.linalg.norm(v)
+
+        # Normal plane A
+        nA = np.array(planeA.GetNormalWorld())
+        nA = nA / np.linalg.norm(nA)
+
+        # Normal plane B
+        nB = np.array(planeB.GetNormalWorld())
+        nB = nB / np.linalg.norm(nB)
+
+        # ========== Angle Line A – Plane A ==========
+        cos1 = abs(np.dot(v, nA))
+        alpha1 = np.degrees(np.arccos(cos1))
+        angleLA_PA = 90 - alpha1
+
+        # ========== Angle Line A – Plane B ==========
+        cos2 = abs(np.dot(v, nB))
+        alpha2 = np.degrees(np.arccos(cos2))
+        angleLA_PB = 90 - alpha2
+
+        # ========== Angle Plane A – Plane B ==========
+        cosPP = abs(np.dot(nA, nB))
+        anglePA_PB = np.degrees(np.arccos(cosPP))
+        anglePA_PB = min(anglePA_PB, 180 - anglePA_PB)
+
+        # Show result
+        self.resultLabel.text = (
+            f"Góc Line A – Plane A: {angleLA_PA:.2f}°\n"
+            f"Góc Line A – Plane B: {angleLA_PB:.2f}°\n"
+            f"Góc Plane A – Plane B: {anglePA_PB:.2f}°"
+        )
+
+
 
     def createFiducialSelector(self, tooltip):
         s = slicer.qMRMLNodeComboBox()
