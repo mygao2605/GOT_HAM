@@ -297,6 +297,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.util.infoDisplay("Frankfort plane created from PoL, PoR, OrL, OrR")
 
     def onCalculate(self):
+        pointNode = self.pointSelector.currentNode()
         lineA = self.lineSelector.currentNode()
         planeA = self.planeSelector.currentNode()
         planeB = self.plane2Selector.currentNode()
@@ -307,12 +308,13 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         resultText = ""
 
-        # ---------- Plane A – Plane B ----------
+        # ================== NORMALS ==================
         nA = np.array(planeA.GetNormalWorld())
         nB = np.array(planeB.GetNormalWorld())
         nA = nA / np.linalg.norm(nA)
         nB = nB / np.linalg.norm(nB)
 
+        # ================== PLANE – PLANE ==================
         cosPP = abs(np.dot(nA, nB))
         cosPP = np.clip(cosPP, -1.0, 1.0)
         anglePA_PB = np.degrees(np.arccos(cosPP))
@@ -320,9 +322,8 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         resultText += f"Góc Plane A – Plane B: {anglePA_PB:.2f}°\n"
 
-        # ---------- Line related (optional) ----------
+        # ================== LINE (OPTIONAL) ==================
         if lineA and lineA.GetNumberOfControlPoints() >= 2:
-
             p1 = np.array(lineA.GetNthControlPointPositionWorld(0))
             p2 = np.array(lineA.GetNthControlPointPositionWorld(1))
             v = p2 - p1
@@ -330,25 +331,36 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             if np.linalg.norm(v) > 0:
                 v = v / np.linalg.norm(v)
 
-                # Line – Plane A
                 cos1 = abs(np.dot(v, nA))
                 cos1 = np.clip(cos1, -1.0, 1.0)
-                alpha1 = np.degrees(np.arccos(cos1))
-                angleLA_PA = 90 - alpha1
+                angleLA_PA = 90 - np.degrees(np.arccos(cos1))
 
-                # Line – Plane B
                 cos2 = abs(np.dot(v, nB))
                 cos2 = np.clip(cos2, -1.0, 1.0)
-                alpha2 = np.degrees(np.arccos(cos2))
-                angleLA_PB = 90 - alpha2
+                angleLA_PB = 90 - np.degrees(np.arccos(cos2))
 
                 resultText += f"Góc Line A – Plane A: {angleLA_PA:.2f}°\n"
                 resultText += f"Góc Line A – Plane B: {angleLA_PB:.2f}°\n"
-
         else:
             resultText += "(Không có Line → bỏ qua góc Line)\n"
 
+        # ================== POINT – PLANE (OPTIONAL) ==================
+        if pointNode and pointNode.GetNumberOfControlPoints() >= 1:
+            p = np.array(pointNode.GetNthControlPointPositionWorld(0))
+
+            oA = np.array(planeA.GetOriginWorld())
+            oB = np.array(planeB.GetOriginWorld())
+
+            dA = abs(np.dot(p - oA, nA))
+            dB = abs(np.dot(p - oB, nB))
+
+            resultText += f"Khoảng cách Point – Plane A: {dA:.2f} mm\n"
+            resultText += f"Khoảng cách Point – Plane B: {dB:.2f} mm\n"
+        else:
+            resultText += "(Không có Point → bỏ qua khoảng cách)\n"
+
         self.resultLabel.text = resultText
+
 
 
 
