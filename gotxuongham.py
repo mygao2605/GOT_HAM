@@ -246,6 +246,21 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.btnExecGenio.connect('clicked(bool)', self.onExecGenio)
 
         self.layout.addStretch(1)
+    
+    def get_pos(self, node):
+        if not node or node.GetNumberOfControlPoints() == 0: return None
+        pos = [0, 0, 0]
+        # Hàm này lấy World Position, tức là nếu Node bị Transform, nó sẽ lấy toạ độ sau khi dịch chuyển
+        node.GetNthControlPointPositionWorld(0, pos)
+        return np.array(pos)
+    
+
+    def fit_plane_svd(self, points):
+        pts = np.array(points); c = np.mean(pts, axis=0)
+        _, _, vh = np.linalg.svd(pts - c)
+        return c, vh[2, :]
+
+
 
     def onCreateFrankfortPlane(self):
 
@@ -282,55 +297,59 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.util.infoDisplay("Frankfort plane created from PoL, PoR, OrL, OrR")
 
     def onCalculate(self):
-
         lineA = self.lineSelector.currentNode()
         planeA = self.planeSelector.currentNode()
         planeB = self.plane2Selector.currentNode()
 
-        # Validate
-        if not lineA or not planeA or not planeB:
-            slicer.util.errorDisplay("Please select Line A, Plane A and Plane B")
+        if not planeA or not planeB:
+            slicer.util.errorDisplay("Please select Plane A and Plane B")
             return
 
-        if lineA.GetNumberOfControlPoints() < 2:
-            slicer.util.errorDisplay("Line A needs 2 points")
-            return
+        resultText = ""
 
-        # Vector line A
-        p1 = np.array(lineA.GetNthControlPointPositionWorld(0))
-        p2 = np.array(lineA.GetNthControlPointPositionWorld(1))
-        v = p2 - p1
-        v = v / np.linalg.norm(v)
-
-        # Normal plane A
+        # ---------- Plane A – Plane B ----------
         nA = np.array(planeA.GetNormalWorld())
-        nA = nA / np.linalg.norm(nA)
-
-        # Normal plane B
         nB = np.array(planeB.GetNormalWorld())
+        nA = nA / np.linalg.norm(nA)
         nB = nB / np.linalg.norm(nB)
 
-        # ========== Angle Line A – Plane A ==========
-        cos1 = abs(np.dot(v, nA))
-        alpha1 = np.degrees(np.arccos(cos1))
-        angleLA_PA = 90 - alpha1
-
-        # ========== Angle Line A – Plane B ==========
-        cos2 = abs(np.dot(v, nB))
-        alpha2 = np.degrees(np.arccos(cos2))
-        angleLA_PB = 90 - alpha2
-
-        # ========== Angle Plane A – Plane B ==========
         cosPP = abs(np.dot(nA, nB))
+        cosPP = np.clip(cosPP, -1.0, 1.0)
         anglePA_PB = np.degrees(np.arccos(cosPP))
         anglePA_PB = min(anglePA_PB, 180 - anglePA_PB)
 
-        # Show result
-        self.resultLabel.text = (
-            f"Góc Line A – Plane A: {angleLA_PA:.2f}°\n"
-            f"Góc Line A – Plane B: {angleLA_PB:.2f}°\n"
-            f"Góc Plane A – Plane B: {anglePA_PB:.2f}°"
-        )
+        resultText += f"Góc Plane A – Plane B: {anglePA_PB:.2f}°\n"
+
+        # ---------- Line related (optional) ----------
+        if lineA and lineA.GetNumberOfControlPoints() >= 2:
+
+            p1 = np.array(lineA.GetNthControlPointPositionWorld(0))
+            p2 = np.array(lineA.GetNthControlPointPositionWorld(1))
+            v = p2 - p1
+
+            if np.linalg.norm(v) > 0:
+                v = v / np.linalg.norm(v)
+
+                # Line – Plane A
+                cos1 = abs(np.dot(v, nA))
+                cos1 = np.clip(cos1, -1.0, 1.0)
+                alpha1 = np.degrees(np.arccos(cos1))
+                angleLA_PA = 90 - alpha1
+
+                # Line – Plane B
+                cos2 = abs(np.dot(v, nB))
+                cos2 = np.clip(cos2, -1.0, 1.0)
+                alpha2 = np.degrees(np.arccos(cos2))
+                angleLA_PB = 90 - alpha2
+
+                resultText += f"Góc Line A – Plane A: {angleLA_PA:.2f}°\n"
+                resultText += f"Góc Line A – Plane B: {angleLA_PB:.2f}°\n"
+
+        else:
+            resultText += "(Không có Line → bỏ qua góc Line)\n"
+
+        self.resultLabel.text = resultText
+
 
 
 
