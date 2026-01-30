@@ -83,10 +83,13 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.btnCreateFrankfort.clicked.connect(self.onCreateFrankfortPlane)
 
         # Point selector
-        self.pointSelector = slicer.qMRMLNodeComboBox()
-        self.pointSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
-        self.pointSelector.noneEnabled = True
-        self.pointSelector.setMRMLScene(slicer.mrmlScene)
+        self.pointASelector = slicer.qMRMLNodeComboBox()
+        self.pointASelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+        self.pointASelector.setMRMLScene(slicer.mrmlScene)
+
+        self.pointBSelector = slicer.qMRMLNodeComboBox()
+        self.pointBSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+        self.pointBSelector.setMRMLScene(slicer.mrmlScene)
 
         # Plane selector
         self.planeSelector = slicer.qMRMLNodeComboBox()
@@ -121,7 +124,8 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Layout
         inputFormLayout.addRow(self.btnCreateFrankfort)
-        inputFormLayout.addRow("Point:", self.pointSelector)
+        inputFormLayout.addRow("Point A:", self.pointASelector)
+        inputFormLayout.addRow("Point B:", self.pointBSelector)
         inputFormLayout.addRow("Plane A:", self.planeSelector)
         inputFormLayout.addRow("Plane B:", self.plane2Selector)
         inputFormLayout.addRow("Line:", self.lineSelector)
@@ -297,7 +301,8 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.util.infoDisplay("Frankfort plane created from PoL, PoR, OrL, OrR")
 
     def onCalculate(self):
-        pointNode = self.pointSelector.currentNode()
+        pointA = self.pointASelector.currentNode()
+        pointB = self.pointBSelector.currentNode()
         lineA = self.lineSelector.currentNode()
         planeA = self.planeSelector.currentNode()
         planeB = self.plane2Selector.currentNode()
@@ -313,6 +318,9 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         nB = np.array(planeB.GetNormalWorld())
         nA = nA / np.linalg.norm(nA)
         nB = nB / np.linalg.norm(nB)
+
+        oA = np.array(planeA.GetOriginWorld())
+        oB = np.array(planeB.GetOriginWorld())
 
         # ================== PLANE – PLANE ==================
         cosPP = abs(np.dot(nA, nB))
@@ -331,35 +339,44 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             if np.linalg.norm(v) > 0:
                 v = v / np.linalg.norm(v)
 
-                cos1 = abs(np.dot(v, nA))
-                cos1 = np.clip(cos1, -1.0, 1.0)
-                angleLA_PA = 90 - np.degrees(np.arccos(cos1))
-
-                cos2 = abs(np.dot(v, nB))
-                cos2 = np.clip(cos2, -1.0, 1.0)
-                angleLA_PB = 90 - np.degrees(np.arccos(cos2))
+                angleLA_PA = 90 - np.degrees(np.arccos(abs(np.dot(v, nA))))
+                angleLA_PB = 90 - np.degrees(np.arccos(abs(np.dot(v, nB))))
 
                 resultText += f"Góc Line A – Plane A: {angleLA_PA:.2f}°\n"
                 resultText += f"Góc Line A – Plane B: {angleLA_PB:.2f}°\n"
         else:
-            resultText += "(Không có Line → bỏ qua góc Line)\n"
+            resultText += "(Không có Line)\n"
 
-        # ================== POINT – PLANE (OPTIONAL) ==================
-        if pointNode and pointNode.GetNumberOfControlPoints() >= 1:
-            p = np.array(pointNode.GetNthControlPointPositionWorld(0))
+        # ================== POINT A ==================
+        if pointA and pointA.GetNumberOfControlPoints() >= 1:
+            pA = np.array(pointA.GetNthControlPointPositionWorld(0))
 
-            oA = np.array(planeA.GetOriginWorld())
-            oB = np.array(planeB.GetOriginWorld())
+            dA_PA = abs(np.dot(pA - oA, nA))
+            dA_PB = abs(np.dot(pA - oB, nB))
 
-            dA = abs(np.dot(p - oA, nA))
-            dB = abs(np.dot(p - oB, nB))
+            resultText += f"Point A → Plane A: {dA_PA:.2f} mm\n"
+            resultText += f"Point A → Plane B: {dA_PB:.2f} mm\n"
 
-            resultText += f"Khoảng cách Point – Plane A: {dA:.2f} mm\n"
-            resultText += f"Khoảng cách Point – Plane B: {dB:.2f} mm\n"
-        else:
-            resultText += "(Không có Point → bỏ qua khoảng cách)\n"
+        # ================== POINT B ==================
+        if pointB and pointB.GetNumberOfControlPoints() >= 1:
+            pB = np.array(pointB.GetNthControlPointPositionWorld(0))
+
+            dB_PA = abs(np.dot(pB - oA, nA))
+            dB_PB = abs(np.dot(pB - oB, nB))
+
+            resultText += f"Point B → Plane A: {dB_PA:.2f} mm\n"
+            resultText += f"Point B → Plane B: {dB_PB:.2f} mm\n"
+
+        # ================== POINT A – POINT B ==================
+        if pointA and pointB and \
+        pointA.GetNumberOfControlPoints() >= 1 and \
+        pointB.GetNumberOfControlPoints() >= 1:
+
+            dAB = np.linalg.norm(pA - pB)
+            resultText += f"Point A – Point B: {dAB:.2f} mm\n"
 
         self.resultLabel.text = resultText
+
 
 
 
