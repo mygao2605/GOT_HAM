@@ -109,11 +109,18 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.lineSelector.noneEnabled = True
         self.lineSelector.setMRMLScene(slicer.mrmlScene)
 
-        # Second plane selector
+        self.linePoint1Selector = slicer.qMRMLNodeComboBox()
+        self.linePoint1Selector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+        self.linePoint1Selector.setMRMLScene(slicer.mrmlScene)
 
+        self.linePoint2Selector = slicer.qMRMLNodeComboBox()
+        self.linePoint2Selector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+        self.linePoint2Selector.setMRMLScene(slicer.mrmlScene)
 
+        self.btnCreateLine = qt.QPushButton("Create Line from 2 Points")
+        self.btnCreateLine.setStyleSheet("background-color: #ccccff; font-weight: bold")
+        self.btnCreateLine.clicked.connect(self.onCreateLineFromPoints)
 
-        # Result label
         self.resultLabel = qt.QLabel("Distance: — mm\nAngle: — °")
         self.resultLabel.setStyleSheet("font-weight: bold; font-size: 13px")
 
@@ -128,6 +135,10 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         inputFormLayout.addRow("Point B:", self.pointBSelector)
         inputFormLayout.addRow("Plane A:", self.planeSelector)
         inputFormLayout.addRow("Plane B:", self.plane2Selector)
+        inputFormLayout.addRow("Line Point 1:", self.linePoint1Selector)
+        inputFormLayout.addRow("Line Point 2:", self.linePoint2Selector)
+        inputFormLayout.addRow(self.btnCreateLine)
+
         inputFormLayout.addRow("Line:", self.lineSelector)
         inputFormLayout.addRow(self.btnStep2)
         inputFormLayout.addRow(self.resultLabel)
@@ -258,6 +269,33 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         node.GetNthControlPointPositionWorld(0, pos)
         return np.array(pos)
     
+
+    def onCreateLineFromPoints(self):
+        p1Node = self.linePoint1Selector.currentNode()
+        p2Node = self.linePoint2Selector.currentNode()
+
+        if not p1Node or not p2Node:
+            slicer.util.errorDisplay("Please select both points to create a line.")
+            return
+
+        if p1Node.GetNumberOfControlPoints() == 0 or p2Node.GetNumberOfControlPoints() == 0:
+            slicer.util.errorDisplay("Selected fiducials must have at least one control point.")
+            return
+
+        # Get coordinates
+        p1 = [0.0, 0.0, 0.0]
+        p2 = [0.0, 0.0, 0.0]
+        p1Node.GetNthControlPointPositionWorld(0, p1)
+        p2Node.GetNthControlPointPositionWorld(0, p2)
+
+        # Create Line node
+        lineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", "P1nP2")
+        lineNode.AddControlPointWorld(p1)
+        lineNode.AddControlPointWorld(p2)
+
+        # Optional: select it automatically
+        self.lineSelector.setCurrentNode(lineNode)
+
 
     def fit_plane_svd(self, points):
         pts = np.array(points); c = np.mean(pts, axis=0)
