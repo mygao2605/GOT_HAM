@@ -82,6 +82,35 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.btnCreateFrankfort.setStyleSheet("background-color: #ccffcc; font-weight: bold")
         self.btnCreateFrankfort.clicked.connect(self.onCreateFrankfortPlane)
 
+        # --- Phần chọn điểm để tạo mặt phẳng mới ---
+        self.customPlaneLabel = qt.QLabel("Create custom plane from points:")
+        self.customPlaneLabel.setStyleSheet("font-weight: bold")
+
+        self.planePoint1Selector = slicer.qMRMLNodeComboBox()
+        self.planePoint1Selector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+        self.planePoint1Selector.noneEnabled = True
+        self.planePoint1Selector.setMRMLScene(slicer.mrmlScene)
+
+        self.planePoint2Selector = slicer.qMRMLNodeComboBox()
+        self.planePoint2Selector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+        self.planePoint2Selector.noneEnabled = True
+        self.planePoint2Selector.setMRMLScene(slicer.mrmlScene)
+
+        self.planePoint3Selector = slicer.qMRMLNodeComboBox()
+        self.planePoint3Selector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+        self.planePoint3Selector.noneEnabled = True
+        self.planePoint3Selector.setMRMLScene(slicer.mrmlScene)
+
+        self.planePoint4Selector = slicer.qMRMLNodeComboBox()
+        self.planePoint4Selector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+        self.planePoint4Selector.noneEnabled = True
+        self.planePoint4Selector.setMRMLScene(slicer.mrmlScene)
+
+        self.btnCreateCustomPlane = qt.QPushButton("Create Plane from 3 or 4 Points")
+        self.btnCreateCustomPlane.setStyleSheet("background-color: #ffe6cc; font-weight: bold")
+        self.btnCreateCustomPlane.clicked.connect(self.onCreatePlaneFromPoints)
+
+
         # Point selector
         self.pointASelector = slicer.qMRMLNodeComboBox()
         self.pointASelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
@@ -131,6 +160,13 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Layout
         inputFormLayout.addRow(self.btnCreateFrankfort)
+        inputFormLayout.addRow(self.customPlaneLabel)
+        inputFormLayout.addRow("Plane Point 1:", self.planePoint1Selector)
+        inputFormLayout.addRow("Plane Point 2:", self.planePoint2Selector)
+        inputFormLayout.addRow("Plane Point 3:", self.planePoint3Selector)
+        inputFormLayout.addRow("Plane Point 4 (optional):", self.planePoint4Selector)
+        inputFormLayout.addRow(self.btnCreateCustomPlane)
+
         inputFormLayout.addRow("Point A:", self.pointASelector)
         inputFormLayout.addRow("Point B:", self.pointBSelector)
         inputFormLayout.addRow("Plane A:", self.planeSelector)
@@ -599,6 +635,45 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         except Exception as e:
             qt.QMessageBox.critical(None, "Lỗi Xuất file", str(e))
 
+    def plane_from_three_points(self, p1, p2, p3):
+        n = np.cross(p2-p1, p3-p1); n /= np.linalg.norm(n)
+        return (p1+p2+p3)/3.0, n
+
+    def onCreatePlaneFromPoints(self):
+        p1 = self.planePoint1Selector.currentNode()
+        p2 = self.planePoint2Selector.currentNode()
+        p3 = self.planePoint3Selector.currentNode()
+        p4 = self.planePoint4Selector.currentNode()
+
+        if not (p1 and p2 and p3):
+            slicer.util.messageBox("Please select at least 3 points")
+            return
+        points = []
+
+        for node in [p1, p2, p3]:
+            pos = [0, 0, 0]
+            node.GetNthControlPointPosition(0, pos)
+            points.append(pos)
+
+        if p4:
+            pos4 = [0, 0, 0]
+            p4.GetNthControlPointPosition(0, pos4)
+            points.append(pos4)
+
+        # Tạo plane
+        if len(points) == 3:
+            origin, normal = self.plane_from_three_points(points[0], points[1], points[2])
+        else:
+            origin, normal = self.fit_plane_svd(points)
+
+        planeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsPlaneNode")
+        planeNode.SetName("CustomPlane")
+        planeNode.SetOrigin(origin)
+        planeNode.SetNormal(normal)
+
+        slicer.util.messageBox("Custom plane created successfully!")
+
+
 
 # ==============================================================================
 #  CLASS 3: LOGIC (UPDATED FOR WORKFLOW)
@@ -655,6 +730,40 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
     # --------------------------------------------------------------------------
     # BƯỚC 2 (MỚI): GENIOPLASTY
     # --------------------------------------------------------------------------
+
+    def onCreatePlaneFromPoints(self):
+        p1 = self.planePoint1Selector.currentNode()
+        p2 = self.planePoint2Selector.currentNode()
+        p3 = self.planePoint3Selector.currentNode()
+        p4 = self.planePoint4Selector.currentNode()
+
+        if not (p1 and p2 and p3):
+            slicer.util.messageBox("Please select at least 3 points")
+            return
+
+        points = [p1, p2, p3]
+
+        # Nếu có chọn thêm điểm thứ 4 thì dùng luôn
+        if p4:
+            points.append(p4)
+
+        coords = []
+        for p in points:
+            pos = [0, 0, 0]
+            p.GetNthControlPointPosition(0, pos)
+            coords.append(pos)
+
+        if len(coords) == 3:
+            origin, normal = self.plane_from_three_points(*coords)
+        else:
+            origin, normal = self.fit_plane_svd(coords)
+
+        planeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsPlaneNode")
+        planeNode.SetOrigin(origin)
+        planeNode.SetNormal(normal)
+
+        slicer.util.messageBox("Custom plane created successfully!")
+
     def init_genio_plane(self, meNode=None):
         planeName = "Genio_Cut_Plane"
         center = [0, 0, 0]
