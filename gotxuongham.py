@@ -284,6 +284,34 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         exportFormLayout.addRow(self.btnStep6)
 
 
+         # --- SECTION 6: EXPORT REPORT ---
+        # --- SECTION 6: EXPORT REPORT ---
+        exportREPORT = ctk.ctkCollapsibleButton()
+        exportREPORT.text = "7. Xuất báo cáo kết quả"
+        formLayout.addRow(exportREPORT)
+        exportFormLayout = qt.QFormLayout(exportREPORT)
+
+        # Thêm các ô điền nội dung
+        self.patientNameEntry = qt.QLineEdit()
+        self.patientNameEntry.placeholderText = "Nhập tên bệnh nhân..."
+        exportFormLayout.addRow("Tên bệnh nhân:", self.patientNameEntry)
+
+        self.patientIdEntry = qt.QLineEdit()
+        self.patientIdEntry.placeholderText = "Nhập mã số (ID)..."
+        exportFormLayout.addRow("Mã số:", self.patientIdEntry)
+
+        self.notesEntry = qt.QTextEdit()
+        self.notesEntry.placeholderText = "Nhập ghi chú thêm nếu có..."
+        self.notesEntry.setMaximumHeight(60) # Giới hạn chiều cao cho gọn
+        exportFormLayout.addRow("Ghi chú:", self.notesEntry)
+
+        
+        self.btnStep7 = qt.QPushButton("Xuất XLSX Report")
+        self.btnStep7.setStyleSheet("background-color: #ffcccc; font-weight: bold")
+        self.btnStep7.clicked.connect(self.onExportXLSX)
+        exportFormLayout.addRow(self.btnStep7)
+
+
         # Connect signals
         self.btnStep1.connect('clicked(bool)', self.onStep1)
         self.btnStep2.connect('clicked(bool)', self.onStep2)
@@ -297,7 +325,111 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.btnExecGenio.connect('clicked(bool)', self.onExecGenio)
 
         self.layout.addStretch(1)
-    
+
+
+
+    def calculatePatientMetrics(self):
+        """
+        Hàm này tập trung vào tính toán các chỉ số từ Landmark hoặc Model.
+        Trả về một dictionary chứa kết quả.
+        """
+        results = {}
+        
+        # Giả sử bạn đã có các biến/hàm tính toán khoảng cách
+        # Ví dụ: d_right = self.getDistance("Go_R", "MSP")
+        
+        results["ti_le_mat"] = "0.84 / 0.89"
+        results["fma_angle"] = 23.3
+        results["go_msp"] = "60.8mm / 60.7mm"
+        # ... thêm các chỉ số khác vào đây
+        
+        return results
+
+
+    def onExportXLSX(self):
+        try:
+            import pandas as pd
+            import datetime
+            import qt
+            import xlsxwriter
+        except ImportError:
+            import slicer
+            slicer.util.pip_install("pandas openpyxl xlsxwriter")
+            import pandas as pd
+            import xlsxwriter
+
+        # 1. Thu thập dữ liệu
+        name = self.patientNameEntry.text
+        patient_id = self.patientIdEntry.text
+        notes = self.notesEntry.toPlainText()
+        metrics = self.calculatePatientMetrics()
+
+        default_name = f"BaoCao_{patient_id}_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx"
+        filePath = qt.QFileDialog.getSaveFileName(None, "Lưu báo cáo", default_name, "*.xlsx")
+
+        if filePath:
+            try:
+                # Tạo workbook mới
+                workbook = xlsxwriter.Workbook(filePath)
+                worksheet = workbook.add_worksheet('BaoCao')
+
+                # --- THIẾT LẬP ĐỊNH DẠNG (FORMAT) ---
+                # Tiêu đề chính (Header)
+                header_fmt = workbook.add_format({
+                    'bold': True, 'fg_color': '#1F4E78', 'font_color': 'white', 'border': 1, 'valign': 'vcenter'
+                })
+                # Dòng phân cách (Section)
+                section_fmt = workbook.add_format({
+                    'bold': True, 'fg_color': '#DDEBF7', 'border': 1, 'valign': 'vcenter'
+                })
+                # Ô dữ liệu bình thường (Cell)
+                cell_fmt = workbook.add_format({'border': 1, 'valign': 'vcenter'})
+
+                # 2. Cấu trúc dữ liệu theo từng dòng
+                # Mỗi phần tử là [Cột A, Cột B, Cột C]
+                data_rows = [
+                    ["Hạng mục", "Nội dung", "Ghi chú"], # Dòng 0 (Header)
+                    ["THÔNG TIN BỆNH NHÂN", "", ""],      # Dòng 1 (Section)
+                    ["Họ tên", name, ""],
+                    ["Mã ID", patient_id, ""],
+                    ["Ghi chú", notes, ""],
+                    ["", "", ""],                        # Dòng trống (Không kẻ bảng)
+                    ["CHỈ SỐ ĐO ĐẠC", "", ""],            # Dòng 6 (Section)
+                    ["Tỉ lệ khuôn mặt (Mô mềm/Xương)", metrics.get("ti_le_mat", "N/A"), "FI' / FI"],
+                    ["Góc FMA (Frankfort-Mandibular)", f"{metrics.get('fma_angle', 0)} độ", "Góc mặt phẳng hàm dưới"],
+                    ["Khoảng cách Go-MSP (Phải/Trái)", metrics.get("go_msp", "N/A"), "Mô mềm & Mô xương"]
+                ]
+
+                # 3. Định dạng độ rộng cột
+                worksheet.set_column('A:A', 35)
+                worksheet.set_column('B:B', 40)
+                worksheet.set_column('C:C', 30)
+
+                # 4. Ghi dữ liệu vào từng ô (Chỉ ghi từ cột 0 đến 2)
+                for row_num, row_data in enumerate(data_rows):
+                    for col_num, cell_value in enumerate(row_data):
+                        
+                        # Chọn format phù hợp cho từng loại dòng
+                        current_fmt = cell_fmt
+                        
+                        if row_num == 0: # Dòng đầu tiên là Header
+                            current_fmt = header_fmt
+                        elif cell_value in ["THÔNG TIN BỆNH NHÂN", "CHỈ SỐ ĐO ĐẠC"]:
+                            current_fmt = section_fmt
+                        
+                        # Nếu là dòng trống (ngăn cách), không áp dụng format (không kẻ bảng)
+                        if row_num == 5:
+                            worksheet.write(row_num, col_num, cell_value)
+                        else:
+                            # CHÌA KHÓA: worksheet.write chỉ kẻ bảng đúng ô được gọi
+                            worksheet.write(row_num, col_num, cell_value, current_fmt)
+
+                workbook.close()
+                qt.QMessageBox.information(None, "Thành công", "Báo cáo đã được lưu!")
+
+            except Exception as e:
+                qt.QMessageBox.critical(None, "Lỗi", f"Lỗi xuất file: {str(e)}")
+
     def get_pos(self, node):
         if not node or node.GetNumberOfControlPoints() == 0: return None
         pos = [0, 0, 0]
