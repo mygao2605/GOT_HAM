@@ -369,60 +369,77 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         if filePath:
             try:
-                # Tạo workbook mới
                 workbook = xlsxwriter.Workbook(filePath)
                 worksheet = workbook.add_worksheet('BaoCao')
 
                 # --- THIẾT LẬP ĐỊNH DẠNG (FORMAT) ---
-                # Tiêu đề chính (Header)
-                header_fmt = workbook.add_format({
-                    'bold': True, 'fg_color': '#1F4E78', 'font_color': 'white', 'border': 1, 'valign': 'vcenter'
-                })
-                # Dòng phân cách (Section)
-                section_fmt = workbook.add_format({
-                    'bold': True, 'fg_color': '#DDEBF7', 'border': 1, 'valign': 'vcenter'
-                })
-                # Ô dữ liệu bình thường (Cell)
+                # Header chính (Xanh đậm)
+                header_fmt = workbook.add_format({'bold': True, 'bg_color': '#1F4E78', 'font_color': 'white', 'border': 1, 'align': 'center'})
+                
+                # Section chính (Xanh nhạt) - THÔNG TIN BỆNH NHÂN / CHỈ SỐ ĐO ĐẠC
+                section_fmt = workbook.add_format({'bold': True, 'bg_color': '#DDEBF7', 'border': 1, 'align': 'center'})
+                
+                # Sub-header (Màu hồng) - Các mục số 1, 2, 3
+                sub_header_fmt = workbook.add_format({'bold': True, 'bg_color': '#FCE4D6', 'font_color': '#C00000', 'border': 1})
+                
+                # Sub-section (Màu vàng) - 4.1 Góc hàm phải/trái
+                sub_section_fmt = workbook.add_format({'bold': True, 'bg_color': '#FFF2CC', 'font_color': '#D6A300', 'border': 1})
+                
+                # Ô dữ liệu bình thường
                 cell_fmt = workbook.add_format({'border': 1, 'valign': 'vcenter'})
 
-                # 2. Cấu trúc dữ liệu theo từng dòng
-                # Mỗi phần tử là [Cột A, Cột B, Cột C]
-                data_rows = [
-                    ["Hạng mục", "Nội dung", "Ghi chú"], # Dòng 0 (Header)
-                    ["THÔNG TIN BỆNH NHÂN", "", ""],      # Dòng 1 (Section)
-                    ["Họ tên", name, ""],
-                    ["Mã ID", patient_id, ""],
-                    ["Ghi chú", notes, ""],
-                    ["", "", ""],                        # Dòng trống (Không kẻ bảng)
-                    ["CHỈ SỐ ĐO ĐẠC", "", ""],            # Dòng 6 (Section)
-                    ["Tỉ lệ khuôn mặt (Mô mềm/Xương)", metrics.get("ti_le_mat", "N/A"), "FI' / FI"],
-                    ["Góc FMA (Frankfort-Mandibular)", f"{metrics.get('fma_angle', 0)} độ", "Góc mặt phẳng hàm dưới"],
-                    ["Khoảng cách Go-MSP (Phải/Trái)", metrics.get("go_msp", "N/A"), "Mô mềm & Mô xương"]
+                # 2. Cấu trúc dữ liệu (Mỗi tuple: [Dữ liệu], Loại Format)
+                # Ta dùng list các tuple để dễ quản lý màu sắc từng dòng
+                data_structure = [
+                    (["Hạng mục", "Nội dung", "Ghi chú"], header_fmt),
+                    (["THÔNG TIN BỆNH NHÂN", "", ""], section_fmt),
+                    (["Họ tên", name, ""], cell_fmt),
+                    (["Mã ID", patient_id, ""], cell_fmt),
+                    (["Ghi chú", notes, ""], cell_fmt),
+                    (["", "", ""], None), # Dòng trống
+                    (["CHỈ SỐ ĐO ĐẠC", "", ""], section_fmt),
+                    (["1.Tỉ lệ khuôn mặt mô mềm và mô xương:", "", ""], sub_header_fmt),
+                    (["FI'", metrics.get("ti_le_mat", "0.84 / 0.89"), "FI' / FI"], cell_fmt),
+                    (["FI", "N/A", "FI' / FI"], cell_fmt),
+                    (["2. Tỉ lệ độ rộng góc hàm/ gò má:", "", ""], sub_header_fmt),
+                    (["GZI'", metrics.get("ti_le_mat", "0.84 / 0.89"), "FI' / FI"], cell_fmt),
+                    (["GZI", "N/A", "FI' / FI"], cell_fmt),
+                    (["3.Khoảng cách từ góc hàm đến mặt phẳng dọc giữa:", "", ""], sub_header_fmt),
+                    (["GoR'-MSP", "0.84 / 0.89", "FI' / FI"], cell_fmt),
+                    (["GoL'- MSP", "N/A", "FI' / FI"], cell_fmt),
+                    (["Độ lệch", "0.84 / 0.89", "FI' / FI"], cell_fmt),
+                    (["GoR-MSP", "0.84 / 0.89", "FI' / FI"], cell_fmt),
+                    (["GoL- MSP", "N/A", "FI' / FI"], cell_fmt),
+                    (["Độ lệch", "0.84 / 0.89", "FI' / FI"], cell_fmt),
+                    (["Góc FMA (Frankfort-Mandibular)", "23.3 độ", "Góc mặt phẳng hàm dưới"], cell_fmt),
+                    (["Khoảng cách Go-MSP (Phải/Trái)", "60.8mm / 60.7mm", "Mô mềm & Mô xương"], cell_fmt),
+                    (["4.Kế hoạch phẫu thuật:", "", ""], sub_header_fmt),
+                    (["4.1. Góc hàm phải", "", ""], sub_section_fmt),
+                    (["CoR-GoR_N-Me", "0.84 / 0.89", "FI' / FI"], cell_fmt),
+                    (["CoR-GoR_N", "0.84 / 0.89", "FI' / FI"], cell_fmt),
+                    (["GoR_N-Me", "0.84 / 0.89", "FI' / FI"], cell_fmt),
+                    (["4.2. Góc hàm trái", "", ""], sub_section_fmt),
+                    (["CoL-GoL_N-Me", "0.84 / 0.89", "FI' / FI"], cell_fmt),
+                    (["CoL-GoL_N", "0.84 / 0.89", "FI' / FI"], cell_fmt),
+                    (["GoL_N-Me", "0.84 / 0.89", "FI' / FI"], cell_fmt),
                 ]
 
                 # 3. Định dạng độ rộng cột
-                worksheet.set_column('A:A', 35)
-                worksheet.set_column('B:B', 40)
-                worksheet.set_column('C:C', 30)
+                worksheet.set_column('A:A', 45)
+                worksheet.set_column('B:B', 35)
+                worksheet.set_column('C:C', 35)
 
-                # 4. Ghi dữ liệu vào từng ô (Chỉ ghi từ cột 0 đến 2)
-                for row_num, row_data in enumerate(data_rows):
-                    for col_num, cell_value in enumerate(row_data):
-                        
-                        # Chọn format phù hợp cho từng loại dòng
-                        current_fmt = cell_fmt
-                        
-                        if row_num == 0: # Dòng đầu tiên là Header
-                            current_fmt = header_fmt
-                        elif cell_value in ["THÔNG TIN BỆNH NHÂN", "CHỈ SỐ ĐO ĐẠC"]:
-                            current_fmt = section_fmt
-                        
-                        # Nếu là dòng trống (ngăn cách), không áp dụng format (không kẻ bảng)
-                        if row_num == 5:
-                            worksheet.write(row_num, col_num, cell_value)
-                        else:
-                            # CHÌA KHÓA: worksheet.write chỉ kẻ bảng đúng ô được gọi
-                            worksheet.write(row_num, col_num, cell_value, current_fmt)
+                # 4. Ghi dữ liệu và Gộp ô (Merge cells) cho các thanh tiêu đề
+                for row_num, (row_data, fmt) in enumerate(data_structure):
+                    if fmt in [section_fmt, sub_header_fmt, sub_section_fmt] and row_data[1] == "":
+                        # Gộp 3 cột lại cho tiêu đề mục
+                        worksheet.merge_range(row_num, 0, row_num, 2, row_data[0], fmt)
+                    else:
+                        for col_num, cell_value in enumerate(row_data):
+                            if fmt:
+                                worksheet.write(row_num, col_num, cell_value, fmt)
+                            else:
+                                worksheet.write(row_num, col_num, cell_value)
 
                 workbook.close()
                 qt.QMessageBox.information(None, "Thành công", "Báo cáo đã được lưu!")
