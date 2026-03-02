@@ -327,6 +327,53 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.layout.addStretch(1)
 
 
+    def getPointToPlaneDistance(self, pointNodeName, planeNodeName):
+        import numpy as np
+        import slicer
+
+        try:
+            pointNode = slicer.util.getNode(pointNodeName)
+            planeNode = slicer.util.getNode(planeNodeName)
+        except:
+            return None
+
+        if pointNode.GetNumberOfControlPoints() == 0:
+            return None
+
+        # Lấy tọa độ điểm
+        P = np.array(pointNode.GetNthControlPointPosition(0))
+
+        # Lấy origin và normal của plane
+        origin = np.array(planeNode.GetOrigin())
+        normal = np.array(planeNode.GetNormal())
+
+        norm_length = np.linalg.norm(normal)
+        if norm_length == 0:
+            return None
+
+        # Khoảng cách có dấu
+        distance = np.dot(normal, P - origin) / norm_length
+
+        return round(distance, 2)
+
+
+    def getDistance(self, nodeName1, nodeName2):
+
+        try:
+            node1 = slicer.util.getNode(nodeName1)
+            node2 = slicer.util.getNode(nodeName2)
+        except:
+            return None
+
+        if node1.GetNumberOfControlPoints() == 0 or node2.GetNumberOfControlPoints() == 0:
+            return None
+
+        p1 = np.array(node1.GetNthControlPointPosition(0))
+        p2 = np.array(node2.GetNthControlPointPosition(0))
+
+        return round(np.linalg.norm(p1 - p2), 2)
+
+
 
     def calculatePatientMetrics(self):
         """
@@ -338,8 +385,22 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Giả sử bạn đã có các biến/hàm tính toán khoảng cách
         # Ví dụ: d_right = self.getDistance("Go_R", "MSP")
         
-        results["ti_le_mat"] = "0.84 / 0.89"
-        results["fma_angle"] = 23.3
+        results["1.1"] = self.getDistance("N", "Me'") / self.getDistance("ZyR'", "ZyL'")
+        results["1.2"] = self.getDistance("N", "Me") / self.getDistance("ZyR'", "ZyL")
+
+
+        results["2.1"] = self.getDistance("GoR'", "GoL'") / self.getDistance("ZyR'", "ZyL'")
+        results["2.2"] = self.getDistance("GoR", "GoL") / self.getDistance("ZyR", "ZyL")
+
+        results["3.1"] = self.getPointToPlaneDistance("GoR'", "MSP_Auto")
+        results["3.2"] = self.getPointToPlaneDistance("GoL'", "MSP_Auto")
+        results["3.3"] = self.getPointToPlaneDistance("GoR'", "MSP_Auto") - self.getPointToPlaneDistance("GoL'", "MSP_Auto")
+
+        results["3.4"] = self.getPointToPlaneDistance("GoR", "MSP_Auto")
+        results["3.5"] = self.getPointToPlaneDistance("GoL", "MSP_Auto")
+        results["3.6"] = self.getPointToPlaneDistance("GoR", "MSP_Auto") - self.getPointToPlaneDistance("GoL", "MSP_Auto")
+
+
         results["go_msp"] = "60.8mm / 60.7mm"
         # ... thêm các chỉ số khác vào đây
         
@@ -398,21 +459,25 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     (["Ghi chú", notes, ""], cell_fmt),
                     (["", "", ""], None), # Dòng trống
                     (["CHỈ SỐ ĐO ĐẠC", "", ""], section_fmt),
+
                     (["1.Tỉ lệ khuôn mặt mô mềm và mô xương:", "", ""], sub_header_fmt),
-                    (["FI'", metrics.get("ti_le_mat", "0.84 / 0.89"), "N-Me'/ ZyR-ZyL'"], cell_fmt),
-                    (["FI", "N/A", "N-Me/ZyR-ZyL"], cell_fmt),
+                    (["FI'", metrics.get("1.1", "N/A"), "N-Me'/ ZyR-ZyL'"], cell_fmt),
+                    (["FI", metrics.get("1.2", "N/A"), "N-Me/ZyR-ZyL"], cell_fmt),
+
                     (["2. Tỉ lệ độ rộng góc hàm/ gò má:", "", ""], sub_header_fmt),
-                    (["GZI'", metrics.get("ti_le_mat", "0.84 / 0.89"), "GoR'-GoL'/ZyR'-ZyL'"], cell_fmt),
-                    (["GZI", "N/A", "GoR-GoL/ZyR-ZyL"], cell_fmt),
+                    (["GZI'", metrics.get("2.1", "N/A"), "GoR'-GoL'/ZyR'-ZyL'"], cell_fmt),
+                    (["GZI", metrics.get("2.2", "N/A"),  "GoR-GoL/ZyR-ZyL"], cell_fmt),
+
                     (["3.Khoảng cách từ góc hàm đến mặt phẳng dọc giữa:", "", ""], sub_header_fmt),
-                    (["GoR'-MSP", "0.84 / 0.89", ""], cell_fmt),
-                    (["GoL'- MSP", "N/A", ""], cell_fmt),
-                    (["Độ lệch", "0.84 / 0.89", "|GoR'-MSP| - |GoL'-MSP|"], cell_fmt),
-                    (["GoR-MSP", "0.84 / 0.89", ""], cell_fmt),
-                    (["GoL- MSP", "N/A", ""], cell_fmt),
-                    (["Độ lệch", "0.84 / 0.89", "|GoR-MSP| - |GoL-MSP|"], cell_fmt),
+                    (["GoR'-MSP", metrics.get("3.1", "N/A"), ""], cell_fmt),
+                    (["GoL'- MSP", metrics.get("3.2", "N/A"), ""], cell_fmt),
+                    (["Độ lệch", metrics.get("3.3", "N/A"), "|GoR'-MSP| - |GoL'-MSP|"], cell_fmt),
+                    (["GoR-MSP", metrics.get("3.4", "N/A"), ""], cell_fmt),
+                    (["GoL- MSP", metrics.get("3.5", "N/A"), ""], cell_fmt),
+                    (["Độ lệch", metrics.get("3.6", "N/A"), "|GoR-MSP| - |GoL-MSP|"], cell_fmt),
                     (["Góc FMA (Frankfort-Mandibular)", "23.3 độ", "Góc mặt phẳng hàm dưới"], cell_fmt),
                     (["Khoảng cách Go-MSP (Phải/Trái)", "60.8mm / 60.7mm", "Mô mềm & Mô xương"], cell_fmt),
+
                     (["4.Kế hoạch phẫu thuật:", "", ""], sub_header_fmt),
                     (["4.1. Góc hàm phải", "", ""], sub_section_fmt),
                     (["CoR-GoR_N-Me", "0.84 / 0.89", ""], cell_fmt),
