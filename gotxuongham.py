@@ -401,6 +401,16 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         results["3.6"] = self.getPointToPlaneDistance("GoR", "MSP_Auto") - self.getPointToPlaneDistance("GoL", "MSP_Auto")
 
 
+        results["4.1"] = self.getDistance("CoR", "GoR_N")
+        results["4.2"] = self.getDistance("CoR", "GoR_N")
+        results["4.3"] = self.getDistance("GoR_N", "Me")
+
+        results["4.4"] = self.getDistance("CoR", "GoR_N")
+        results["4.5"] = self.getDistance("CoL", "GoL_N")
+        results["4.6"] = self.getDistance("GoL_N", "Me")
+
+
+
         results["go_msp"] = "60.8mm / 60.7mm"
         # ... thêm các chỉ số khác vào đây
         
@@ -479,14 +489,14 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     (["Khoảng cách Go-MSP (Phải/Trái)", "60.8mm / 60.7mm", "Mô mềm & Mô xương"], cell_fmt),
 
                     (["4.Kế hoạch phẫu thuật:", "", ""], sub_header_fmt),
-                    (["4.1. Góc hàm phải", "", ""], sub_section_fmt),
-                    (["CoR-GoR_N-Me", "0.84 / 0.89", ""], cell_fmt),
-                    (["CoR-GoR_N", "0.84 / 0.89", ""], cell_fmt),
-                    (["GoR_N-Me", "0.84 / 0.89", ""], cell_fmt),
-                    (["4.2. Góc hàm trái", "", ""], sub_section_fmt),
-                    (["CoL-GoL_N-Me", "0.84 / 0.89", ""], cell_fmt),
-                    (["CoL-GoL_N", "0.84 / 0.89", ""], cell_fmt),
-                    (["GoL_N-Me", "0.84 / 0.89", ""], cell_fmt),
+                    (["4.1. Hàm phải", "", ""], sub_section_fmt),
+                    (["gCoR-GoR_N-Me", metrics.get("4.1", "N/A"), ""], cell_fmt),
+                    (["CoR-GoR_N", metrics.get("4.2", "N/A"), ""], cell_fmt),
+                    (["GoR_N-Me", metrics.get("4.3", "N/A"), ""], cell_fmt),
+                    (["4.2. Hàm trái", "", ""], sub_section_fmt),
+                    (["gCoL-GoL_N-Me", metrics.get("4.4", "N/A"), ""], cell_fmt),
+                    (["CoL-GoL_N", metrics.get("4.5", "N/A"), ""], cell_fmt),
+                    (["GoL_N-Me", metrics.get("4.6", "N/A"), ""], cell_fmt),
                 ]
 
                 # 3. Định dạng độ rộng cột
