@@ -400,6 +400,9 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         results["3.5"] = abs(self.getPointToPlaneDistance("GoL", "MSP_Auto"))
         results["3.6"] = abs(self.getPointToPlaneDistance("GoR", "MSP_Auto")) - abs(self.getPointToPlaneDistance("GoL", "MSP_Auto"))
 
+        results["3.7"] = self.getPointToPlaneDistance("Me", "MSP_Auto")
+
+
 
         results["4.1"] = slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngleDegrees()
         results["4.2"] = self.getDistance("CoR", "GoR_N")
@@ -485,6 +488,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     (["GoR-MSP", metrics.get("3.4", "N/A"), ""], cell_fmt),
                     (["GoL- MSP", metrics.get("3.5", "N/A"), ""], cell_fmt),
                     (["Độ lệch", metrics.get("3.6", "N/A"), "|GoR-MSP| - |GoL-MSP|"], cell_fmt),
+                    (["Me-MSP", metrics.get("3.7", "N/A"), ""], cell_fmt),
                     (["Góc FMA (Frankfort-Mandibular)", "23.3 độ", "Góc mặt phẳng hàm dưới"], cell_fmt),
                     (["Khoảng cách Go-MSP (Phải/Trái)", "60.8mm / 60.7mm", "Mô mềm & Mô xương"], cell_fmt),
 
