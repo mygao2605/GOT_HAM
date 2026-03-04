@@ -392,13 +392,13 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         results["2.1"] = self.getDistance("GoR'", "GoL'") / self.getDistance("ZyR'", "ZyL'")
         results["2.2"] = self.getDistance("GoR", "GoL") / self.getDistance("ZyR", "ZyL")
 
-        results["3.1"] = self.getPointToPlaneDistance("GoR'", "MSP_Auto")
-        results["3.2"] = self.getPointToPlaneDistance("GoL'", "MSP_Auto")
-        results["3.3"] = self.getPointToPlaneDistance("GoR'", "MSP_Auto") - self.getPointToPlaneDistance("GoL'", "MSP_Auto")
+        results["3.1"] = abs(self.getPointToPlaneDistance("GoR'", "MSP_Auto"))
+        results["3.2"] = abs(self.getPointToPlaneDistance("GoL'", "MSP_Auto")  )
+        results["3.3"] = abs(self.getPointToPlaneDistance("GoR'", "MSP_Auto")) - abs(self.getPointToPlaneDistance("GoL'", "MSP_Auto"))
 
-        results["3.4"] = self.getPointToPlaneDistance("GoR", "MSP_Auto")
-        results["3.5"] = self.getPointToPlaneDistance("GoL", "MSP_Auto")
-        results["3.6"] = self.getPointToPlaneDistance("GoR", "MSP_Auto") - self.getPointToPlaneDistance("GoL", "MSP_Auto")
+        results["3.4"] = abs(self.getPointToPlaneDistance("GoR", "MSP_Auto"))
+        results["3.5"] = abs(self.getPointToPlaneDistance("GoL", "MSP_Auto"))
+        results["3.6"] = abs(self.getPointToPlaneDistance("GoR", "MSP_Auto")) - abs(self.getPointToPlaneDistance("GoL", "MSP_Auto"))
 
 
         results["4.1"] = slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngleDegrees()
