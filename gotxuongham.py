@@ -385,7 +385,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Giả sử bạn đã có các biến/hàm tính toán khoảng cách
         # Ví dụ: d_right = self.getDistance("Go_R", "MSP")
         
-        results["1.1"] = self.getDistance("N", "Me'") / self.getDistance("ZyR'", "ZyL'")
+        results["1.1"] = self.getDistance("N'", "Me'") / self.getDistance("ZyR'", "ZyL'")
         results["1.2"] = self.getDistance("N", "Me") / self.getDistance("ZyR'", "ZyL")
 
 
