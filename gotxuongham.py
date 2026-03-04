@@ -401,11 +401,11 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         results["3.6"] = self.getPointToPlaneDistance("GoR", "MSP_Auto") - self.getPointToPlaneDistance("GoL", "MSP_Auto")
 
 
-        results["4.1"] = slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngle()
+        results["4.1"] = slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngleDegrees()
         results["4.2"] = self.getDistance("CoR", "GoR_N")
         results["4.3"] = self.getDistance("GoR_N", "Me")
 
-        results["4.4"] = slicer.util.getNode("Angle_CoL_GoL_N_Me").GetAngle()
+        results["4.4"] = slicer.util.getNode("Angle_CoL_GoL_N_Me").GetAngleDegrees()
         results["4.5"] = self.getDistance("CoL", "GoL_N")
         results["4.6"] = self.getDistance("GoL_N", "Me")
 
