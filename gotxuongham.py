@@ -363,9 +363,15 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             node1 = slicer.util.getNode(nodeName1)
             node2 = slicer.util.getNode(nodeName2)
         except:
+            print("Node not found:", nodeName1, nodeName2)
             return None
 
-        if node1.GetNumberOfControlPoints() == 0 or node2.GetNumberOfControlPoints() == 0:
+        if node1.GetNumberOfControlPoints() == 0:
+            print(nodeName1, "has no control points")
+            return None
+
+        if node2.GetNumberOfControlPoints() == 0:
+            print(nodeName2, "has no control points")
             return None
 
         p1 = np.array(node1.GetNthControlPointPosition(0))
