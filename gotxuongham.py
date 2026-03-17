@@ -414,6 +414,9 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         results["3.7"] = self.getPointToPlaneDistance("Me", "MSP_Auto")
 
+        results["3.8"] = self.getDistance("PMFR", "PMFL")
+        results["3.9"] = self.getDistance("PMFR'", "PMFL'")
+        results["3.10"] = self.getDistance("PMFR", "PMFL") / self.getDistance("GoR", "GoL")
 
 
         results["4.1"] = slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngleDegrees()
@@ -501,8 +504,10 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     (["GoL- MSP", metrics.get("3.5", "N/A"), ""], cell_fmt),
                     (["Độ lệch", metrics.get("3.6", "N/A"), "|GoR-MSP| - |GoL-MSP|"], cell_fmt),
                     (["Me-MSP", metrics.get("3.7", "N/A"), ""], cell_fmt),
-                    (["Góc FMA (Frankfort-Mandibular)", "23.3 độ", "Góc mặt phẳng hàm dưới"], cell_fmt),
-                    (["Khoảng cách Go-MSP (Phải/Trái)", "60.8mm / 60.7mm", "Mô mềm & Mô xương"], cell_fmt),
+
+                    (["Độ rộng của cằm mô xương", metrics.get("3.8", "N/A"), "PMFR-PMFL"], cell_fmt),
+                    (["Độ rộng của cằm mô mềm", metrics.get("3.9", "N/A"), "PMFR'-PMFL'"], cell_fmt),
+                    (["Tỉ lệ MTR", metrics.get("3.10", "N/A"), "PMFR-PMFL / (GoR-GoL)"], cell_fmt),
 
                     (["4.Kế hoạch phẫu thuật:", "", ""], sub_header_fmt),
                     (["4.1. Hàm phải", "", ""], sub_section_fmt),
