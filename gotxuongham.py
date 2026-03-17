@@ -82,6 +82,11 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.btnCreateFrankfort.setStyleSheet("background-color: #ccffcc; font-weight: bold")
         self.btnCreateFrankfort.clicked.connect(self.onCreateFrankfortPlane)
 
+
+        self.btnCreateMfRnL = qt.QPushButton("Create MfR n MfL Plane")
+        self.btnCreateMfRnL.setStyleSheet("background-color: #ccff13; font-weight: bold")
+        self.btnCreateMfRnL.clicked.connect(self.onCreateMfRnLPlane)
+
         # --- Phần chọn điểm để tạo mặt phẳng mới ---
         self.customPlaneLabel = qt.QLabel("Create custom plane from points:")
         self.customPlaneLabel.setStyleSheet("font-weight: bold")
@@ -160,6 +165,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Layout
         inputFormLayout.addRow(self.btnCreateFrankfort)
+        inputFormLayout.addRow(self.btnCreateMfRnL)
         inputFormLayout.addRow(self.customPlaneLabel)
         inputFormLayout.addRow("Plane Point 1:", self.planePoint1Selector)
         inputFormLayout.addRow("Plane Point 2:", self.planePoint2Selector)
@@ -574,6 +580,52 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
 
+    def onCreateMfRnLPlane(self):
+        configs = [
+            ("MfR", "MfR_Plane", [1, 0, 0]), # Màu đỏ
+            ("MfL", "MfL_Plane", [0, 0, 1])  # Màu xanh dương
+        ]
+        try:
+            # 2. Lấy node tham chiếu gốc
+            msp_node = slicer.util.getNode("MSP_Auto")
+            
+            # Lấy vector pháp tuyến của MSP_Auto
+            ref_normal = [0, 0, 0]
+            msp_node.GetNormal(ref_normal)
+            
+            new_normal = [ref_normal[1], -ref_normal[0], ref_normal[2]]
+
+            for point_name, plane_name, color in configs:
+                # 3. Lấy node điểm (MfR/MfL)
+                try:
+                    point_node = slicer.util.getNode(point_name)
+                except slicer.util.MRMLNodeNotFoundException:
+                    print(f"Bỏ qua: Không tìm thấy node điểm {point_name}")
+                    continue
+
+                # 4. Lấy tọa độ điểm
+                pos = [0, 0, 0]
+                point_node.GetNthControlPointPosition(0, pos)
+                plane_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsPlaneNode", plane_name)
+                plane_node.SetOrigin(pos)
+                plane_node.SetNormal(new_normal)
+                plane_node.SetSize(100.0, 100.0) # Có thể điều chỉnh kích thước tùy ý
+
+                # 7. Thiết lập hiển thị
+                plane_node.CreateDefaultDisplayNodes()
+                disp_node = plane_node.GetDisplayNode()
+                if disp_node:
+                    disp_node.SetSelectedColor(color)
+                    disp_node.SetOpacity(0.5)
+                    disp_node.SetVisibility(True)
+            print("Hoàn thành: Đã tạo/cập nhật MfR_Plane và MfL_Plane.")
+        except slicer.util.MRMLNodeNotFoundException:
+            print("Lỗi: Cần có node 'MSP_Auto' để làm tham chiếu vuông góc.")
+        except Exception as e:
+            print(f"Lỗi không xác định: {str(e)}")
+        
+
+
     def onCreateFrankfortPlane(self):
 
         try:
@@ -684,9 +736,6 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             resultText += f"Point A – Point B: {dAB:.2f} mm\n"
 
         self.resultLabel.text = resultText
-
-
-
 
 
 
