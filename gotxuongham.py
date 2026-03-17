@@ -613,7 +613,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             pIncisorMidpoint = (pU1L + pU1R) / 2.0
 
             # Fit plane qua 3 điểm: Trung điểm răng cửa và 2 răng hàm 6
-            origin, normal = self.plane_from_three_points([pIncisorMidpoint, pU6R, pU6L])
+            origin, normal = self.plane_from_three_points(pIncisorMidpoint, pU6R, pU6L)
 
             # 4. Cập nhật Plane
             # Chuyển numpy array về list nếu cần thiết
