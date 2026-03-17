@@ -269,6 +269,10 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.curveSelector.setMRMLScene(slicer.mrmlScene)
         actionsFormLayout.addRow("Đường cong (OC):", self.curveSelector)
 
+        self.btnOCMirror = qt.QPushButton("Tạo OC Mirror (Đối xứng OC)")
+        self.btnOCMirror.setStyleSheet("background-color: #ffcccc; font-weight: bold")
+        actionsFormLayout.addRow(self.btnOCMirror)
+
         # Góc cắt (Yaw)
         self.yawSlider = ctk.ctkSliderWidget()
         self.yawSlider.singleStep = 1.0
@@ -331,6 +335,9 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.btnStep4.connect('clicked(bool)', self.onStep4)
         self.btnStep5.connect('clicked(bool)', self.onStep5)
         self.btnStep6.connect('clicked(bool)', self.onStep6)
+
+        self.btnOCMirror.connect('clicked(bool)', self.onOCMirror)
+
         
         # Connect Genio signals
         self.btnInitGenio.connect('clicked(bool)', self.onInitGenio)
@@ -403,12 +410,12 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Giả sử bạn đã có các biến/hàm tính toán khoảng cách
         # Ví dụ: d_right = self.getDistance("Go_R", "MSP")
         
-        results["1.1"] = self.getDistance("N'", "Me'") / self.getDistance("ZyR'", "ZyL'")
-        results["1.2"] = self.getDistance("N", "Me") / self.getDistance("ZyR'", "ZyL")
+        results["1.1"] = round(self.getDistance("N'", "Me'") / self.getDistance("ZyR'", "ZyL'"), 2)
+        results["1.2"] = round(self.getDistance("N", "Me") / self.getDistance("ZyR'", "ZyL"), 2)
 
 
-        results["2.1"] = self.getDistance("GoR'", "GoL'") / self.getDistance("ZyR'", "ZyL'")
-        results["2.2"] = self.getDistance("GoR", "GoL") / self.getDistance("ZyR", "ZyL")
+        results["2.1"] = round(self.getDistance("GoR'", "GoL'") / self.getDistance("ZyR'", "ZyL'"), 2)
+        results["2.2"] = round(self.getDistance("GoR", "GoL") / self.getDistance("ZyR", "ZyL"), 2)
 
         results["3.1"] = abs(self.getPointToPlaneDistance("GoR'", "MSP_Auto"))
         results["3.2"] = abs(self.getPointToPlaneDistance("GoL'", "MSP_Auto")  )
@@ -418,11 +425,11 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         results["3.5"] = abs(self.getPointToPlaneDistance("GoL", "MSP_Auto"))
         results["3.6"] = abs(self.getPointToPlaneDistance("GoR", "MSP_Auto")) - abs(self.getPointToPlaneDistance("GoL", "MSP_Auto"))
 
-        results["3.7"] = self.getPointToPlaneDistance("Me", "MSP_Auto")
+        results["3.7"] = round(self.getPointToPlaneDistance("Me", "MSP_Auto"), 2)
 
-        results["3.8"] = self.getDistance("PMFR", "PMFL")
-        results["3.9"] = self.getDistance("PMFR'", "PMFL'")
-        results["3.10"] = self.getDistance("PMFR", "PMFL") / self.getDistance("GoR", "GoL")
+        results["3.8"] = round(self.getDistance("PMFR", "PMFL"), 2)
+        results["3.9"] = round(self.getDistance("PMFR'", "PMFL'"), 2)
+        results["3.10"] = round(self.getDistance("PMFR", "PMFL") / self.getDistance("GoR", "GoL"), 2)
 
 
         results["4.1"] = slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngleDegrees()
@@ -956,6 +963,19 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             
         except Exception as e:
             qt.QMessageBox.critical(None, "Lỗi B5", f"Không thể tạo máng: {str(e)}")
+        finally:
+            qt.QApplication.restoreOverrideCursor()
+
+    def onOCMirror(self):
+        try:
+            qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+            
+            # Logic để tạo OC Mirror
+            self.logic.run_step_4_create_oc_mirror()
+            
+            qt.QMessageBox.information(None, "Thành công", "Đã tạo OC Mirror thành công.")
+        except Exception as e:
+            qt.QMessageBox.critical(None, "Lỗi", f"Không thể tạo OC Mirror: {str(e)}")
         finally:
             qt.QApplication.restoreOverrideCursor()
 
@@ -2734,10 +2754,6 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         print(f"✅ Đã tạo mặt phẳng cắt cân đối qua L và L_mirror.")
         slicer.util.selectModule("Markups")
 
-    # --------------------------------------------------------------------------
-    # BƯỚC 5: TẠO MÁNG PHẪU THUẬT HIỂN THỊ (VIEW ONLY)
-    # --------------------------------------------------------------------------
-
     def run_step_5_create_fragment_guides(self, params):
         """
         Tạo máng hướng dẫn ôm sát và bao phủ toàn bộ bone_1, bone_2.
@@ -2755,11 +2771,11 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         # 1. Lấy Nodes
         try:
             bone_node = slicer.util.getNode('bone_1')
-            curve_node = slicer.util.getNode('OC_R')
+            curve_node = slicer.util.getNode('OC')
             cut_node = slicer.util.getNode('cut_1')
             ribbon_node = slicer.util.getNode('Ribbon_R')
         except:
-            print("❌ Lỗi: Thiếu node bone_1, OC_R hoặc cut_1.")
+            print("❌ Lỗi: Thiếu node bone_1, OC hoặc cut_1.")
             return
 
         print("--- Đang tính toán máng hướng dẫn (Manual Logic) ---")
@@ -2899,7 +2915,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         
     def guide_bone_2_export(self, clearance=0.2, shell=2.0, height=18.0):
         config = [
-            ('bone_2', 'OC_L', 'cut_2', 'GoL')
+            ('bone_2', 'OC_Mirror', 'cut_2', 'GoL')
         ]
         for bone_name, curve_name, cut_name, landmark_name in config:
             print(f"\n>>> ĐANG XỬ LÝ: {bone_name} <<<")
@@ -3044,3 +3060,10 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             
             print(f" --- XỬ LÝ XONG: {result_name} ---")
 
+    def run_step_4_create_oc_mirror(self):
+        lCutNode = slicer.util.getNode("cut_1")
+        if not lCutNode:
+            print("❌ Lỗi: Không tìm thấy node cut_1.")
+            return
+        self.create_mirror_curve_node(lCutNode, "OC_Mirror")
+        print("✅ Đã tạo OC_Mirror từ cut_1.")
