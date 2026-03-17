@@ -87,6 +87,10 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.btnCreateMfRnL.setStyleSheet("background-color: #ccff13; font-weight: bold")
         self.btnCreateMfRnL.clicked.connect(self.onCreateMfRnLPlane)
 
+        self.btnCreateOcclusal = qt.QPushButton("Create Occlusal  Plane")
+        self.btnCreateOcclusal.setStyleSheet("background-color: #12ff13; font-weight: bold")
+        self.btnCreateOcclusal.clicked.connect(self.onCreateOcclusalPlane)
+
         # --- Phần chọn điểm để tạo mặt phẳng mới ---
         self.customPlaneLabel = qt.QLabel("Create custom plane from points:")
         self.customPlaneLabel.setStyleSheet("font-weight: bold")
@@ -166,6 +170,8 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Layout
         inputFormLayout.addRow(self.btnCreateFrankfort)
         inputFormLayout.addRow(self.btnCreateMfRnL)
+        inputFormLayout.addRow(self.btnCreateOcclusal)
+
         inputFormLayout.addRow(self.customPlaneLabel)
         inputFormLayout.addRow("Plane Point 1:", self.planePoint1Selector)
         inputFormLayout.addRow("Plane Point 2:", self.planePoint2Selector)
@@ -585,6 +591,47 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
 
+    def onCreateOcclusalPlane(self):
+        try:
+            # 1. Lấy hoặc tạo Plane Node
+            try:
+                planeNode = slicer.util.getNode("Occlusal Plane")
+            except:
+                planeNode = slicer.mrmlScene.AddNewNodeByClass(
+                    "vtkMRMLMarkupsPlaneNode", "Occlusal Plane"
+                )
+
+            # 2. Lấy tọa độ các mốc (Landmarks)
+            # Lưu ý: Nên dùng try-except riêng ở đây để báo lỗi nếu thiếu 1 trong các răng
+            pU1L = self.get_pos(slicer.util.getNode('U1L'))
+            pU1R = self.get_pos(slicer.util.getNode('U1R'))
+            pU6R = self.get_pos(slicer.util.getNode('U6R'))
+            pU6L = self.get_pos(slicer.util.getNode('U6L'))
+
+            # 3. Tính toán hình học
+            # Trung điểm răng cửa: M = (U1 + L1) / 2
+            pIncisorMidpoint = (pU1L + pU1R) / 2.0
+
+            # Fit plane qua 3 điểm: Trung điểm răng cửa và 2 răng hàm 6
+            origin, normal = self.plane_from_three_points([pIncisorMidpoint, pU6R, pU6L])
+
+            # 4. Cập nhật Plane
+            # Chuyển numpy array về list nếu cần thiết
+            planeNode.SetOriginWorld(origin)
+            planeNode.SetNormalWorld(normal)
+            planeNode.SetDisplayVisibility(True)
+
+            # 5. Cập nhật UI
+            if self.planeSelector:
+                self.planeSelector.setCurrentNode(planeNode)
+
+            slicer.util.showStatusMessage("Occlusal plane created successfully.")
+
+        except Exception as e:
+            slicer.util.errorDisplay(f"Lỗi: Không tìm thấy đủ các điểm mốc (U1, L1, U6R, U6L). Chi tiết: {e}")
+
+
+
     def onCreateMfRnLPlane(self):
         configs = [
             ("MfR", "MfR_Plane", [1, 0, 0]), # Màu đỏ
@@ -629,8 +676,6 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         except Exception as e:
             print(f"Lỗi không xác định: {str(e)}")
         
-
-
     def onCreateFrankfortPlane(self):
 
         try:
