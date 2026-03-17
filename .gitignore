@@ -1,0 +1,4 @@
+__pycache__/*.pyc
+__pycache__/*.pyd
+__pycache__/*.pyo
+__pycache__/*$py.class
