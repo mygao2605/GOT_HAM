@@ -282,7 +282,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.yawSlider.suffix = " °"
         actionsFormLayout.addRow("Góc nghiêng cắt (Yaw):", self.yawSlider)
 
-        self.btnStep4 = qt.QPushButton("Tạo mặt cắt & Cắt xương")
+        self.btnStep4 = qt.QPushButton("Tạo mặt cắt - cắt xương")
         self.btnStep4.setStyleSheet("background-color: #ffcccc; font-weight: bold")
         actionsFormLayout.addRow(self.btnStep4)
 
@@ -1934,21 +1934,48 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             
 
         # 6. TẠO RIBBON TRÁI (cut_2) - MIRROR/CLIP
+        # --- 6. TẠO RIBBON TRÁI (cut_2) - TƯƠNG TỰ cut_1, KHÔNG QUA MIRROR ---
         ribbon_L_pd = None
-        if ribbon_R_pd:
+        curveNodeL = None
+        try:
+            curveNodeL = slicer.util.getNode('OC_Mirror')
+        except:
+            # Nếu không tìm thấy cũng không sao, chỉ in thông báo
+            print("Thông báo: Không tìm thấy node 'OC_Mirror', bỏ qua cắt bên trái.")
+        # Giả sử bạn truyền thêm curveNodeL vào hàm, nếu không có thì có thể dùng curveNode2
+        if 'curveNodeL' in locals() and curveNodeL: 
             try:
-                print("Đang tạo Sheet Trái (cut_2 - Mirror)...")
-                # Gương cut_1 qua MSP
-                cut2_raw = self.mirror_polydata_about_plane(ribbon_R_pd, O_msp, N_msp)
+                print("Đang tạo Sheet Trái (cut_2) bằng tính toán Bishop độc lập...")
                 
-                # Clip lại lần nữa để đảm bảo cắt sạch (Giữ lại phía ngược lại)
-                ribbon_L_pd = self.clip_by_plane(cut2_raw, O_msp, N_msp, keep_sign=-keep_sign)
+                # A. Tính toán hình học cho bên Trái (Quy trình lặp lại y hệt cut_1)
+                P0_L = []
+                for i in range(curveNodeL.GetNumberOfControlPoints()):
+                    p = [0.0]*3
+                    curveNodeL.GetNthControlPointPosition(i, p) 
+                    P0_L.append(np.array(p))
+                
+                P_L = self.resample_cardinal(np.array(P0_L), SAMPLES)
+                P_L = self.extend_polyline(P_L, END_EXT_MM)
+                U_L, V_L, T_L = self.bishop_frame(P_L, O_msp, N_msp)
+                
+                # Nghiêng (Lưu ý: yaw có thể cần đảo dấu tùy theo hướng vector U,V bên trái)
+                yaw_L = -math.radians(yaw_degrees) 
+                Uo_L  = np.cos(yaw_L)*U_L + np.sin(yaw_L)*V_L
+                
+                sheet_L_full = self.build_sheet_polydata(P_L, Uo_L, LAT_OUT_MM, MED_IN_MM)
+                
+                # B. Clip theo MSP (Giữ bên trái)
+                med_d_L = float(np.median(np.dot(P_L - O_msp.reshape(1,3), N_msp)))
+                keep_sign_L = +1 if med_d_L >= 0 else -1
+                
+                ribbon_L_pd = self.clip_by_plane(sheet_L_full, O_msp, N_msp, keep_sign=keep_sign_L)
                 ribbon_L_pd = self.ensure_normals(ribbon_L_pd)
                 
                 self.create_model_node("Ribbon_L", ribbon_L_pd, color=(1.0, 0.6, 0.6), opacity=1)
                 self.create_model_node("cut_2", ribbon_L_pd, visibility=False)
+
             except Exception as e:
-                print(f"Lỗi tạo cut_2: {e}")
+                print(f"Lỗi tạo cut_2 độc lập: {e}")
                 ribbon_L_pd = None
 
 
@@ -3063,59 +3090,82 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             print(f" --- XỬ LÝ XONG: {result_name} ---")
 
     def run_step_4_create_oc_mirror(self, curve_oc=None):
+        # 1. LẤY DỮ LIỆU ĐẦU VÀO
         if curve_oc is None:
-            curve_oc = slicer.util.getNode('OC')
+            # Ưu tiên lấy từ Selector nếu bạn đang làm module GUI, nếu không thì dùng tên mặc định
+            curve_oc = getattr(self, "curveSelector", None)
+            curve_oc = curve_oc.currentNode() if curve_oc else slicer.util.getNode('OC')
+            
         plane_msp = slicer.util.getNode('MSP_Auto')
+        
+        # Lấy model xương để snap (thay 'Mandible' bằng tên chính xác của bạn)
+        try:
+            model_bone = slicer.util.getNode('Mandible')
+        except:
+            model_bone = None
+            print("⚠️ Cảnh báo: Không tìm thấy node 'Mandible', đường mirror sẽ không bám được vào xương.")
 
         if not curve_oc or not plane_msp:
-            print("❌ Lỗi: Không tìm thấy node 'OC' hoặc 'MSP_Auto'. Hãy kiểm tra tên trong bảng Data.")
-        else:
-            print(f"--- Đang bắt đầu lấy đối xứng {curve_oc.GetName()} ---")
+            print("❌ Lỗi: Thiếu node 'OC' hoặc 'MSP_Auto'.")
+            return
 
-            # --- 2. LẤY THÔNG SỐ MẶT PHẲNG MSP_AUTO ---
-            normal_msp = np.zeros(3)
-            origin_msp = np.zeros(3)
-            plane_msp.GetNormalWorld(normal_msp)
-            plane_msp.GetOriginWorld(origin_msp)
-            
-            # Chuẩn hóa Vector pháp tuyến
-            normal_msp = normal_msp / np.linalg.norm(normal_msp)
+        print(f"--- Đang thực thi Mirror & Snap cho: {curve_oc.GetName()} ---")
 
-            # --- 3. QUẢN LÝ NODE OC_MIRROR ---
-            mirror_node_name = "OC_Mirror"
+        # --- 2. LẤY THÔNG SỐ MẶT PHẲNG ---
+        normal_msp = np.zeros(3)
+        origin_msp = np.zeros(3)
+        plane_msp.GetNormalWorld(normal_msp)
+        plane_msp.GetOriginWorld(origin_msp)
+        normal_msp = normal_msp / np.linalg.norm(normal_msp)
+
+        # --- 3. QUẢN LÝ NODE OC_MIRROR ---
+        mirror_node_name = "OC_Mirror"
+        nodes = slicer.mrmlScene.GetNodesByName(mirror_node_name)
+        for n in range(nodes.GetNumberOfItems()):
+            slicer.mrmlScene.RemoveNode(nodes.GetItemAsObject(n))
             
-            # Xóa node cũ cùng tên nếu có để cập nhật mới
-            nodes = slicer.mrmlScene.GetNodesByName(mirror_node_name)
-            for n in range(nodes.GetNumberOfItems()):
-                slicer.mrmlScene.RemoveNode(nodes.GetItemAsObject(n))
+        mirror_curve = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsCurveNode", mirror_node_name)
+
+        # --- 4. THIẾT LẬP BỘ SNAP (Nếu có model xương) ---
+        cell_locator = None
+        if model_bone:
+            cell_locator = vtk.vtkStaticCellLocator()
+            cell_locator.SetDataSet(model_bone.GetPolyData())
+            cell_locator.BuildLocator()
+
+        # --- 5. TÍNH TOÁN VÀ SNAP ---
+        num_points = curve_oc.GetNumberOfControlPoints()
+        if num_points == 0:
+            print("❌ Lỗi: Curve gốc không có điểm.")
+            return
+
+        for i in range(num_points):
+            p = np.zeros(3)
+            curve_oc.GetNthControlPointPositionWorld(i, p)
+            
+            # A. Tính đối xứng lý tưởng
+            v = p - origin_msp
+            dist = np.dot(v, normal_msp)
+            p_mirrored = p - 2 * dist * normal_msp
+            
+            # B. Snap vào xương (nếu có locator)
+            final_point = p_mirrored
+            if cell_locator:
+                closest_p = [0,0,0]
+                cell_id = vtk.reference(0); sub_id = vtk.reference(0); dist2 = vtk.reference(0.0)
+                cell_locator.FindClosestPoint(p_mirrored, closest_p, cell_id, sub_id, dist2)
+                final_point = closest_p
                 
-            mirror_curve = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsCurveNode", mirror_node_name)
+            mirror_curve.AddControlPoint(final_point)
 
-            # --- 4. TÍNH TOÁN ĐỐI XỨNG ---
-            num_points = curve_oc.GetNumberOfControlPoints()
-            
-            if num_points == 0:
-                print("❌ Lỗi: Curve 'OC' không có điểm nào để mirror.")
-            else:
-                for i in range(num_points):
-                    p = np.zeros(3)
-                    curve_oc.GetNthControlPointPositionWorld(i, p)
-                    
-                    # Công thức Mirror: P' = P - 2 * ((P-O).n) * n
-                    v = p - origin_msp
-                    dist = np.dot(v, normal_msp)
-                    p_mirrored = p - 2 * dist * normal_msp
-                    
-                    # Thêm điểm vào node mới
-                    mirror_curve.AddControlPoint(p_mirrored)
+        # --- 6. HIỂN THỊ ---
+        mirror_curve.CreateDefaultDisplayNodes()
+        display_node = mirror_curve.GetDisplayNode()
+        if display_node:
+            display_node.SetSelectedColor(0, 1, 0) # Màu xanh lá để phân biệt với đường cũ
+            display_node.SetGlyphScale(2.5)
+            display_node.SetTextScale(2.5)
+            display_node.SetVisibility(True)
 
-                # --- 5. TÙY CHỈNH HIỂN THỊ ---
-                mirror_curve.CreateDefaultDisplayNodes()
-                display_node = mirror_curve.GetDisplayNode()
-                if display_node:
-                    display_node.SetSelectedColor(1, 0, 0) # Màu đỏ
-                    display_node.SetGlyphScale(2.5)       # Kích thước điểm
-                    display_node.SetTextScale(2.5)        # Kích thước chữ
-                    display_node.SetVisibility(True)
-
-                print(f"✅ Đã tạo thành công {num_points} điểm đối xứng cho: {mirror_node_name}")
+        print(f"✅ Đã tạo thành công: {mirror_node_name}")
+        return mirror_curve
