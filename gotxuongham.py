@@ -1434,13 +1434,37 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         return n
 
     def split_bone_by_sheet(self, bone, sheet, msp_o, msp_n):
-        imp=vtk.vtkImplicitPolyDataDistance(); imp.SetInput(sheet)
-        c=vtk.vtkClipPolyData(); c.SetInputData(bone); c.SetClipFunction(imp); c.SetValue(0)
-        c.InsideOutOff(); c.Update(); p1=self.keep_largest_island(c.GetOutput())
-        c.InsideOutOn(); c.Update(); p2=self.keep_largest_island(c.GetOutput())
-        c1=np.array(self.get_center(p1)); c2=np.array(self.get_center(p2))
-        if abs(np.dot(c1-msp_o, msp_n)) > abs(np.dot(c2-msp_o, msp_n)): return p1, p2
-        return p1, p2
+        imp = vtk.vtkImplicitPolyDataDistance()
+        imp.SetInput(sheet)
+        
+        c = vtk.vtkClipPolyData()
+        c.SetInputData(bone)
+        c.SetClipFunction(imp)
+        c.SetValue(0)
+        
+        # Lấy 2 phần sau khi cắt
+        c.InsideOutOff(); c.Update()
+        p1 = self.keep_largest_island(c.GetOutput())
+        
+        c.InsideOutOn(); c.Update()
+        p2 = self.keep_largest_island(c.GetOutput())
+        
+        # Tính tâm để so sánh khoảng cách tới trục giữa (MSP)
+        c1 = np.array(self.get_center(p1))
+        c2 = np.array(self.get_center(p2))
+        
+        # Khoảng cách từ tâm đến mặt phẳng MSP
+        dist1 = abs(np.dot(c1 - msp_o, msp_n))
+        dist2 = abs(np.dot(c2 - msp_o, msp_n))
+        
+        # PRINT DEBUG: Để bạn kiểm tra con số thực tế trong Console
+        print(f"--- So sánh khoảng cách MSP: d1={dist1:.2f}, d2={dist2:.2f} ---")
+        
+        # Phần nào nằm XA mặt phẳng giữa hơn thì đó là miếng xương rời (Góc hàm)
+        if dist1 > dist2:
+            return p1, p2
+        else:
+            return p2, p1 # ĐẢO NGƯỢC LẠI NẾU p2 XA HƠN
 
     def keep_largest_island(self, pd):
         c=vtk.vtkPolyDataConnectivityFilter(); c.SetInputData(pd); c.SetExtractionModeToLargestRegion(); c.Update()
