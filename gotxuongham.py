@@ -965,8 +965,15 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
             
+            if not self.logic.msp_origin is not None:
+                qt.QMessageBox.warning(None, "Cảnh báo", "Chưa có MSP. Hãy chạy Bước 1 trước!")
+                return
+            
+            if not self.curveSelector.currentNode():
+                qt.QMessageBox.warning(None, "Cảnh báo", "Chưa chọn đường cong (Curve) để cắt!")
+                return
             # Logic để tạo OC Mirror
-            self.logic.run_step_4_create_oc_mirror()
+            self.logic.run_step_4_create_oc_mirror(self.curveSelector.currentNode())
             
             qt.QMessageBox.information(None, "Thành công", "Đã tạo OC Mirror thành công.")
         except Exception as e:
@@ -3055,10 +3062,60 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             
             print(f" --- XỬ LÝ XONG: {result_name} ---")
 
-    def run_step_4_create_oc_mirror(self):
-        lCutNode = slicer.util.getNode("cut_1")
-        if not lCutNode:
-            print("❌ Lỗi: Không tìm thấy node cut_1.")
-            return
-        self.create_mirror_curve_node(lCutNode, "OC_Mirror")
-        print("✅ Đã tạo OC_Mirror từ cut_1.")
+    def run_step_4_create_oc_mirror(self, curve_oc=None):
+        if curve_oc is None:
+            curve_oc = slicer.util.getNode('OC')
+        plane_msp = slicer.util.getNode('MSP_Auto')
+
+        if not curve_oc or not plane_msp:
+            print("❌ Lỗi: Không tìm thấy node 'OC' hoặc 'MSP_Auto'. Hãy kiểm tra tên trong bảng Data.")
+        else:
+            print(f"--- Đang bắt đầu lấy đối xứng {curve_oc.GetName()} ---")
+
+            # --- 2. LẤY THÔNG SỐ MẶT PHẲNG MSP_AUTO ---
+            normal_msp = np.zeros(3)
+            origin_msp = np.zeros(3)
+            plane_msp.GetNormalWorld(normal_msp)
+            plane_msp.GetOriginWorld(origin_msp)
+            
+            # Chuẩn hóa Vector pháp tuyến
+            normal_msp = normal_msp / np.linalg.norm(normal_msp)
+
+            # --- 3. QUẢN LÝ NODE OC_MIRROR ---
+            mirror_node_name = "OC_Mirror"
+            
+            # Xóa node cũ cùng tên nếu có để cập nhật mới
+            nodes = slicer.mrmlScene.GetNodesByName(mirror_node_name)
+            for n in range(nodes.GetNumberOfItems()):
+                slicer.mrmlScene.RemoveNode(nodes.GetItemAsObject(n))
+                
+            mirror_curve = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsCurveNode", mirror_node_name)
+
+            # --- 4. TÍNH TOÁN ĐỐI XỨNG ---
+            num_points = curve_oc.GetNumberOfControlPoints()
+            
+            if num_points == 0:
+                print("❌ Lỗi: Curve 'OC' không có điểm nào để mirror.")
+            else:
+                for i in range(num_points):
+                    p = np.zeros(3)
+                    curve_oc.GetNthControlPointPositionWorld(i, p)
+                    
+                    # Công thức Mirror: P' = P - 2 * ((P-O).n) * n
+                    v = p - origin_msp
+                    dist = np.dot(v, normal_msp)
+                    p_mirrored = p - 2 * dist * normal_msp
+                    
+                    # Thêm điểm vào node mới
+                    mirror_curve.AddControlPoint(p_mirrored)
+
+                # --- 5. TÙY CHỈNH HIỂN THỊ ---
+                mirror_curve.CreateDefaultDisplayNodes()
+                display_node = mirror_curve.GetDisplayNode()
+                if display_node:
+                    display_node.SetSelectedColor(1, 0, 0) # Màu đỏ
+                    display_node.SetGlyphScale(2.5)       # Kích thước điểm
+                    display_node.SetTextScale(2.5)        # Kích thước chữ
+                    display_node.SetVisibility(True)
+
+                print(f"✅ Đã tạo thành công {num_points} điểm đối xứng cho: {mirror_node_name}")
