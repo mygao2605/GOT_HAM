@@ -1983,7 +1983,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
                 U_L, V_L, T_L = self.bishop_frame(P_L, O_msp, N_msp)
                 
                 # Nghiêng (Lưu ý: yaw có thể cần đảo dấu tùy theo hướng vector U,V bên trái)
-                yaw_L = -math.radians(yaw_degrees) 
+                yaw_L = math.radians(yaw_degrees) 
                 Uo_L  = np.cos(yaw_L)*U_L + np.sin(yaw_L)*V_L
                 
                 sheet_L_full = self.build_sheet_polydata(P_L, Uo_L, LAT_OUT_MM, MED_IN_MM)
