@@ -439,8 +439,12 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         results["3.16"] = round(self.getDistance("ObiL", "GoL"), 1)
 
 
-        results["3.17"] = self.measure_distance_to_canal("GoR", "Mandibular canal")
-        results["3.18"] = self.measure_distance_to_canal("GoR'", "Mandibular canal")
+        results["3.17"] = round(self.measure_distance_to_canal("GoR", "Mandibular canal"), 2)
+        results["3.18"] = round(self.measure_distance_to_canal("GoR'", "Mandibular canal"), 2)
+
+        results["3.19"] = round(self.measure_curve_to_canal("OC"), 2)
+        results["3.20"] = round(self.measure_curve_to_canal("OC_Mirror"), 2)
+
 
 
         results["4.1"] = slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngleDegrees()
@@ -535,9 +539,13 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     (["3.3. Khoảng cách từ dái tai đến góc hàm:", "", ""], sub_section_fmt),
                     (["ObiR-GoR", metrics.get("3.15", "N/A"), ""], cell_fmt),
                     (["ObiL-GoL", metrics.get("3.16", "N/A"), ""], cell_fmt),
-                    (["3.3. Khoảng cách từ góc hàm đến dây thần kinh", "", ""], sub_section_fmt),
+                    (["3.4. Khoảng cách từ góc hàm đến dây thần kinh", "", ""], sub_section_fmt),
                     (["GoR-Canal", metrics.get("3.17", "N/A"), ""], cell_fmt),
                     (["GoR'-Canal", metrics.get("3.18", "N/A"), ""], cell_fmt),
+                    (["3.5. Khoảng cách ngắn nhất", "", ""], sub_section_fmt),
+                    (["OC-Canal", metrics.get("3.19", "N/A"), ""], cell_fmt),
+                    (["OC_Mirror-Canal", metrics.get("3.20", "N/A"), ""], cell_fmt),
+
                     (["4.Kế hoạch phẫu thuật:", "", ""], sub_header_fmt),
                     (["4.1. Hàm phải", "", ""], sub_section_fmt),
                     (["gCoR-GoR_N-Me", metrics.get("4.1", "N/A"), ""], cell_fmt),
@@ -579,8 +587,79 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         node.GetNthControlPointPositionWorld(0, pos)
         return np.array(pos)
     
+    def measure_curve_to_canal(self,curve_name, canal_model_name='Mandibular canal', safety_threshold=2.0):
+        """
+        Tính khoảng cách ngắn nhất từ các điểm trên một đường cong (Curve) đến bề mặt Model.
+        """
+        try:
+            # 1. Lấy Nodes
+            curve_node = slicer.mrmlScene.GetFirstNodeByName(curve_name)
+            canal_node = slicer.mrmlScene.GetFirstNodeByName(canal_model_name)
 
-    def measure_distance_to_canal(landmark_name, canal_model_name='Mandibular canal', safety_threshold=2.0):
+            if not curve_node or not canal_node:
+                print(f"[-] Lỗi: Không tìm thấy '{curve_name}' hoặc '{canal_model_name}'")
+                return None
+
+            # 2. Lấy tập hợp điểm đã nội suy trên đường cong (Sampled points)
+            curve_points = curve_node.GetCurvePointsWorld()
+            num_points = curve_points.GetNumberOfPoints()
+
+            if num_points == 0:
+                print(f"[-] Lỗi: Đường cong '{curve_name}' không có dữ liệu điểm.")
+                return None
+
+            # 3. Thiết lập bộ lọc tìm điểm gần nhất trên Mesh
+            poly_data = canal_node.GetPolyData()
+            dist_filter = vtk.vtkImplicitPolyDataDistance()
+            dist_filter.SetInput(poly_data)
+
+            min_overall_dist = float('inf')
+            best_point_on_curve = [0, 0, 0]
+            best_point_on_canal = [0, 0, 0]
+
+            # 4. Duyệt qua tất cả các điểm trên đường cong để tìm cặp điểm gần nhau nhất
+            for i in range(num_points):
+                p_curve = [0.0, 0.0, 0.0]
+                curve_points.GetPoint(i, p_curve)
+                
+                # Tính khoảng cách từ điểm hiện tại trên Curve đến Mesh
+                closest_p_canal = [0.0, 0.0, 0.0]
+                d = abs(dist_filter.EvaluateFunction(p_curve))
+                
+                if d < min_overall_dist:
+                    min_overall_dist = d
+                    best_point_on_curve = np.array(p_curve)
+                    dist_filter.EvaluateGradient(p_curve, closest_p_canal)
+                    best_point_on_canal = np.array(closest_p_canal)
+
+            # 5. Hiển thị kết quả
+            status = "NGUY HIỂM" if min_overall_dist < safety_threshold else "AN TOÀN"
+            print(f"[{status}] Khoảng cách ngắn nhất {curve_name} -> Canal: {min_overall_dist:.2f} mm")
+
+            # 6. Vẽ đường line kết nối tại vị trí ngắn nhất đó
+            line_name = f"Shortest_{curve_name}_To_Canal"
+            old_line = slicer.mrmlScene.GetFirstNodeByName(line_name)
+            if old_line:
+                slicer.mrmlScene.RemoveNode(old_line)
+
+            line_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", line_name)
+            line_node.AddControlPoint(best_point_on_curve)
+            line_node.AddControlPoint(best_point_on_canal)
+            
+            line_node.CreateDefaultDisplayNodes()
+            disp = line_node.GetDisplayNode()
+            color = (1, 0, 0) if min_overall_dist < safety_threshold else (1, 0.5, 0) # Cam nếu an toàn
+            disp.SetSelectedColor(color)
+            disp.SetColor(color)
+
+            return min_overall_dist
+
+        except Exception as e:
+            print(f"[!] Lỗi khi xử lý đường {curve_name}: {str(e)}")
+            return None
+    
+
+    def measure_distance_to_canal(self,landmark_name, canal_model_name='Mandibular canal', safety_threshold=2.0):
         try:
             # 1. Lấy Nodes
             landmark_node = slicer.mrmlScene.GetFirstNodeByName(landmark_name)
