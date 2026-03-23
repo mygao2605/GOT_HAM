@@ -427,9 +427,9 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         results["3.7"] = round(self.getPointToPlaneDistance("Me", "MSP_Auto"), 2)
 
-        results["3.8"] = round(self.getDistance("PMFR", "PMFL"), 2)
-        results["3.9"] = round(self.getDistance("PMFR'", "PMFL'"), 2)
-        results["3.10"] = round(self.getDistance("PMFR", "PMFL") / self.getDistance("GoR", "GoL"), 2)
+        results["3.8"] = round(self.getDistance("PMfR", "PMfL"), 2)
+        results["3.9"] = round(self.getDistance("PMfR'", "PMfL'"), 2)
+        results["3.10"] = round(self.getDistance("PMfR", "PMfL") / self.getDistance("GoR", "GoL"), 2)
 
         results["3.11"] = round(self.getDistance("CoR", "GoR"), 1)
         results["3.12"] = round(self.getDistance("CoL", "GoL"), 1)
