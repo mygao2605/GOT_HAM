@@ -442,7 +442,6 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         results["4.1"] = slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngleDegrees()
         results["4.2"] = self.getDistance("CoR", "GoR_N")
         results["4.3"] = self.getDistance("GoR_N", "Me")
-
         results["4.4"] = slicer.util.getNode("Angle_CoL_GoL_N_Me").GetAngleDegrees()
         results["4.5"] = self.getDistance("CoL", "GoL_N")
         results["4.6"] = self.getDistance("GoL_N", "Me")
@@ -523,13 +522,13 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     (["Độ rộng của cằm mô xương", metrics.get("3.8", "N/A"), "PMFR-PMFL"], cell_fmt),
                     (["Độ rộng của cằm mô mềm", metrics.get("3.9", "N/A"), "PMFR'-PMFL'"], cell_fmt),
                     (["Tỉ lệ MTR", metrics.get("3.10", "N/A"), "PMFR-PMFL / (GoR-GoL)"], cell_fmt),
-                    (["Chiều dài ngành đứng XHD phải:", "", ""], sub_header_fmt),
+                    (["3.1. Chiều dài ngành đứng XHD phải:", "", ""], sub_section_fmt),
                     (["CoR-GoR", metrics.get("3.11", "N/A"), ""], cell_fmt),
-                    (["Chiều dài ngành đứng XHD trái:", "", ""], sub_header_fmt),
+                    (["3.2. Chiều dài ngành đứng XHD trái:", "", ""], sub_section_fmt),
                     (["CoL-GoL", metrics.get("3.12", "N/A"), ""], cell_fmt),
                     (["Ngành ngang phải", metrics.get("3.13", "N/A"), ""], cell_fmt),
                     (["Ngành ngang trái", metrics.get("3.14", "N/A"), ""], cell_fmt),
-                    (["Khoảng cách từ dái tai đến góc hàm:", "", ""], sub_header_fmt),
+                    (["3.3. Khoảng cách từ dái tai đến góc hàm:", "", ""], sub_section_fmt),
                     (["ObiR-GoR", metrics.get("3.15", "N/A"), ""], cell_fmt),
                     (["ObiL-GoL", metrics.get("3.16", "N/A"), ""], cell_fmt),
 
