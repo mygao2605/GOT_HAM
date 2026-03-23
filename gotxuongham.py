@@ -439,6 +439,10 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         results["3.16"] = round(self.getDistance("ObiL", "GoL"), 1)
 
 
+        results["3.17"] = self.measure_distance_to_canal("GoR", "Mandibular canal")
+        results["3.18"] = self.measure_distance_to_canal("GoR'", "Mandibular canal")
+
+
         results["4.1"] = slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngleDegrees()
         results["4.2"] = self.getDistance("CoR", "GoR_N")
         results["4.3"] = self.getDistance("GoR_N", "Me")
@@ -531,8 +535,9 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     (["3.3. Khoảng cách từ dái tai đến góc hàm:", "", ""], sub_section_fmt),
                     (["ObiR-GoR", metrics.get("3.15", "N/A"), ""], cell_fmt),
                     (["ObiL-GoL", metrics.get("3.16", "N/A"), ""], cell_fmt),
-
-
+                    (["3.3. Khoảng cách từ góc hàm đến dây thần kinh", "", ""], sub_section_fmt),
+                    (["GoR-Canal", metrics.get("3.17", "N/A"), ""], cell_fmt),
+                    (["GoR'-Canal", metrics.get("3.18", "N/A"), ""], cell_fmt),
                     (["4.Kế hoạch phẫu thuật:", "", ""], sub_header_fmt),
                     (["4.1. Hàm phải", "", ""], sub_section_fmt),
                     (["gCoR-GoR_N-Me", metrics.get("4.1", "N/A"), ""], cell_fmt),
@@ -573,6 +578,60 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Hàm này lấy World Position, tức là nếu Node bị Transform, nó sẽ lấy toạ độ sau khi dịch chuyển
         node.GetNthControlPointPositionWorld(0, pos)
         return np.array(pos)
+    
+
+    def measure_distance_to_canal(landmark_name, canal_model_name='Mandibular canal', safety_threshold=2.0):
+        try:
+            # 1. Lấy Nodes
+            landmark_node = slicer.mrmlScene.GetFirstNodeByName(landmark_name)
+            canal_node = slicer.mrmlScene.GetFirstNodeByName(canal_model_name)
+
+            if not landmark_node or not canal_node:
+                print(f"[-] Lỗi: Không tìm thấy '{landmark_name}' hoặc '{canal_model_name}'")
+                return None
+
+            # 2. Lấy tọa độ Landmark (Point 0)
+            pos = [0.0, 0.0, 0.0]
+            landmark_node.GetNthControlPointPositionWorld(0, pos)
+            pos_np = np.array(pos)
+
+            # 3. Thuật toán tìm điểm gần nhất trên Mesh
+            poly_data = canal_node.GetPolyData()
+            dist_filter = vtk.vtkImplicitPolyDataDistance()
+            dist_filter.SetInput(poly_data)
+            
+            closest_p = [0.0, 0.0, 0.0]
+            raw_dist = dist_filter.EvaluateFunction(pos)
+            dist_filter.EvaluateGradient(pos, closest_p)
+            abs_dist = abs(raw_dist)
+
+            # 4. Hiển thị kết quả lên Console
+            status = "NGUY HIỂM" if abs_dist < safety_threshold else "AN TOÀN"
+            print(f"[{status}] {landmark_name} -> {canal_model_name}: {abs_dist:.2f} mm")
+
+            # 5. Vẽ thước đo (Line) trong không gian 3D
+            line_name = f"Dist_{landmark_name}_To_Canal"
+            old_line = slicer.mrmlScene.GetFirstNodeByName(line_name)
+            if old_line:
+                slicer.mrmlScene.RemoveNode(old_line)
+
+            line_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", line_name)
+            line_node.AddControlPoint(pos_np)
+            line_node.AddControlPoint(closest_p)
+            
+            # 6. Định dạng hiển thị
+            line_node.CreateDefaultDisplayNodes()
+            disp = line_node.GetDisplayNode()
+            color = (1, 0, 0) if abs_dist < safety_threshold else (0, 1, 0) # Đỏ nếu gần, Xanh nếu xa
+            disp.SetSelectedColor(color)
+            disp.SetColor(color)
+            disp.SetPointLabelsVisibility(False) # Ẩn nhãn điểm cho đỡ rối
+            
+            return abs_dist
+
+        except Exception as e:
+            print(f"[!] Lỗi hệ thống khi xử lý {landmark_name}: {str(e)}")
+            return None
     
 
     def onCreateLineFromPoints(self):
