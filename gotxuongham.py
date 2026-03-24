@@ -91,6 +91,10 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.btnCreateOcclusal.setStyleSheet("background-color: #12ff13; font-weight: bold")
         self.btnCreateOcclusal.clicked.connect(self.onCreateOcclusalPlane)
 
+        self.btnCreateMandible = qt.QPushButton("Create Mandible  Plane")
+        self.btnCreateMandible.setStyleSheet("background-color: #12ff13; font-weight: bold")
+        self.btnCreateMandible.clicked.connect(self.onCreateMandiblePlane)
+
         # --- Phần chọn điểm để tạo mặt phẳng mới ---
         self.customPlaneLabel = qt.QLabel("Create custom plane from points:")
         self.customPlaneLabel.setStyleSheet("font-weight: bold")
@@ -171,6 +175,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         inputFormLayout.addRow(self.btnCreateFrankfort)
         inputFormLayout.addRow(self.btnCreateMfRnL)
         inputFormLayout.addRow(self.btnCreateOcclusal)
+        inputFormLayout.addRow(self.btnCreateMandible)
 
         inputFormLayout.addRow(self.customPlaneLabel)
         inputFormLayout.addRow("Plane Point 1:", self.planePoint1Selector)
@@ -444,6 +449,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         results["3.19"] = round(self.measure_curve_to_canal("OC"), 2)
         results["3.20"] = round(self.measure_curve_to_canal("OC_Mirror"), 2)
+        results["3.21"] = self.angle_between_planes("Frankfort", "Mandible Plane")
 
 
 
@@ -546,6 +552,8 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     (["3.5. Khoảng cách ngắn nhất", "", ""], sub_section_fmt),
                     (["OC-Canal", metrics.get("3.19", "N/A"), ""], cell_fmt),
                     (["OC_Mirror-Canal", metrics.get("3.20", "N/A"), ""], cell_fmt),
+                     (["Góc", "", ""], sub_section_fmt),
+                    (["Frankfort-Mandible", metrics.get("3.21", "N/A"), ""], cell_fmt),
 
                     (["4.Kế hoạch phẫu thuật:", "", ""], sub_header_fmt),
                     (["4.1. Hàm phải", "", ""], sub_section_fmt),
@@ -748,6 +756,41 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         _, _, vh = np.linalg.svd(pts - c)
         return c, vh[2, :]
 
+    def onCreateMandiblePlane(self):
+        try:
+            try:
+                planeNode = slicer.util.getNode("Mandible Plane")
+            except:
+                planeNode = slicer.mrmlScene.AddNewNodeByClass(
+                    "vtkMRMLMarkupsPlaneNode", "Mandible Plane"
+                )
+
+            # Lấy các landmark (đúng tên node)
+            pGoR_node = slicer.util.getNode('GoR')
+            pGoL_node = slicer.util.getNode('GoL')
+            pMe_node = slicer.util.getNode('Me')
+
+            # Lấy tọa độ (dùng hàm có sẵn của bạn)
+            pGoR = self.get_pos(pGoR_node)
+            pGoL = self.get_pos(pGoL_node)
+            pMe = self.get_pos(pMe_node)
+
+            # Fit plane (dùng logic có sẵn)
+            origin, normal = self.plane_from_three_points(pGoR, pGoL, pMe)
+
+            # Cập nhật Plane
+            planeNode.SetOriginWorld(origin)
+            planeNode.SetNormalWorld(normal)
+            planeNode.SetDisplayVisibility(True)
+
+            # Cập nhật UI
+            if self.planeSelector:
+                self.planeSelector.setCurrentNode(planeNode)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Lỗi: Không tìm thấy đủ các điểm mốc (GoR, GoL, Me). Chi tiết: {e}")
+        
+
+
 
 
     def onCreateOcclusalPlane(self):
@@ -789,6 +832,21 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         except Exception as e:
             slicer.util.errorDisplay(f"Lỗi: Không tìm thấy đủ các điểm mốc (U1, L1, U6R, U6L). Chi tiết: {e}")
 
+
+
+    def angle_between_planes(planeA, planeB):
+
+        nA = np.array(planeA.GetNormalWorld())
+        nB = np.array(planeB.GetNormalWorld())
+
+        nA = nA / np.linalg.norm(nA)
+        nB = nB / np.linalg.norm(nB)
+
+        cos_val = abs(np.dot(nA, nB))
+        cos_val = np.clip(cos_val, -1.0, 1.0)
+
+        angle = np.degrees(np.arccos(cos_val))
+        return min(angle, 180 - angle)
 
 
     def onCreateMfRnLPlane(self):
