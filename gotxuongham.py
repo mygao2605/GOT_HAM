@@ -449,7 +449,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         results["3.19"] = round(self.measure_curve_to_canal("OC"), 2)
         results["3.20"] = round(self.measure_curve_to_canal("OC_Mirror"), 2)
-        results["3.21"] = self.angle_between_planes(slicer.util.getNode("Frankfort"), slicer.util.getNode("Mandible Plane"))
+        results["3.21"] = round(self.angle_between_planes(slicer.util.getNode("Frankfort"), slicer.util.getNode("Mandible Plane")), 2)
 
         results["4.1"] = slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngleDegrees()
         results["4.2"] = self.getDistance("CoR", "GoR_N")
