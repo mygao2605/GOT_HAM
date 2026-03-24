@@ -451,14 +451,14 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         results["3.20"] = round(self.measure_curve_to_canal("OC_Mirror"), 2)
         results["3.21"] = round(self.angle_between_planes(slicer.util.getNode("Frankfort"), slicer.util.getNode("Mandible Plane")), 2)
 
-        results["4.1"] = slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngleDegrees()
-        results["4.2"] = self.getDistance("CoR", "GoR_N")
-        results["4.3"] = self.getDistance("GoR_N", "Me")
-        results["4.4"] = slicer.util.getNode("Angle_CoL_GoL_N_Me").GetAngleDegrees()
-        results["4.5"] = self.getDistance("CoL", "GoL_N")
-        results["4.6"] = self.getDistance("GoL_N", "Me")
-        results["4.7"] = slicer.util.getNode("Angle_CoR_GoR_Me").GetAngleDegrees()    
-        results["4.8"] = slicer.util.getNode("Angle_CoL_GoL_Me").GetAngleDegrees()    
+        results["4.1"] = round(slicer.util.getNode("Angle_CoR_GoR_N_Me").GetAngleDegrees(), 2)
+        results["4.2"] = round(self.getDistance("CoR", "GoR_N"), 2)
+        results["4.3"] = round(self.getDistance("GoR_N", "Me"), 2)
+        results["4.4"] = round(slicer.util.getNode("Angle_CoL_GoL_N_Me").GetAngleDegrees(), 2)
+        results["4.5"] = round(self.getDistance("CoL", "GoL_N"), 2)
+        results["4.6"] = round(self.getDistance("GoL_N", "Me"), 2)
+        results["4.7"] = round(slicer.util.getNode("Angle_CoR_GoR_Me").GetAngleDegrees(), 2)
+        results["4.8"] = round(slicer.util.getNode("Angle_CoL_GoL_Me").GetAngleDegrees(), 2)
         return results
 
 
