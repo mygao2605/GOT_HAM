@@ -453,6 +453,8 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         results["4.4"] = slicer.util.getNode("Angle_CoL_GoL_N_Me").GetAngleDegrees()
         results["4.5"] = self.getDistance("CoL", "GoL_N")
         results["4.6"] = self.getDistance("GoL_N", "Me")
+        results["4.7"] = slicer.util.getNode("Angle_CoR_GoR_Me").GetAngleDegrees()    
+        results["4.8"] = slicer.util.getNode("Angle_CoL_GoL_Me").GetAngleDegrees()    
         
         return results
 
@@ -526,7 +528,6 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     (["GoL- MSP", metrics.get("3.5", "N/A"), ""], cell_fmt),
                     (["Độ lệch", metrics.get("3.6", "N/A"), "|GoR-MSP| - |GoL-MSP|"], cell_fmt),
                     (["Me-MSP", metrics.get("3.7", "N/A"), ""], cell_fmt),
-
                     (["Độ rộng của cằm mô xương", metrics.get("3.8", "N/A"), "PMFR-PMFL"], cell_fmt),
                     (["Độ rộng của cằm mô mềm", metrics.get("3.9", "N/A"), "PMFR'-PMFL'"], cell_fmt),
                     (["Tỉ lệ MTR", metrics.get("3.10", "N/A"), "PMFR-PMFL / (GoR-GoL)"], cell_fmt),
@@ -548,10 +549,12 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
                     (["4.Kế hoạch phẫu thuật:", "", ""], sub_header_fmt),
                     (["4.1. Hàm phải", "", ""], sub_section_fmt),
+                    (["gCoR-GoR-Me", metrics.get("4.7", "N/A"), ""], cell_fmt),
                     (["gCoR-GoR_N-Me", metrics.get("4.1", "N/A"), ""], cell_fmt),
                     (["CoR-GoR_N", metrics.get("4.2", "N/A"), ""], cell_fmt),
                     (["GoR_N-Me", metrics.get("4.3", "N/A"), ""], cell_fmt),
                     (["4.2. Hàm trái", "", ""], sub_section_fmt),
+                    (["gCoL-GoL-Me", metrics.get("4.8", "N/A"), ""], cell_fmt),
                     (["gCoL-GoL_N-Me", metrics.get("4.4", "N/A"), ""], cell_fmt),
                     (["CoL-GoL_N", metrics.get("4.5", "N/A"), ""], cell_fmt),
                     (["GoL_N-Me", metrics.get("4.6", "N/A"), ""], cell_fmt),
