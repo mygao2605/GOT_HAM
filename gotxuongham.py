@@ -459,7 +459,6 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         results["4.6"] = self.getDistance("GoL_N", "Me")
         results["4.7"] = slicer.util.getNode("Angle_CoR_GoR_Me").GetAngleDegrees()    
         results["4.8"] = slicer.util.getNode("Angle_CoL_GoL_Me").GetAngleDegrees()    
-        
         return results
 
 
