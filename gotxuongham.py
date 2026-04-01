@@ -445,7 +445,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
         results["3.17"] = round(self.measure_distance_to_canal("GoR", "Mandibular canal"), 2)
-        results["3.18"] = round(self.measure_distance_to_canal("GoR'", "Mandibular canal"), 2)
+        results["3.18"] = round(self.measure_distance_to_canal("GoL", "Mandibular canal"), 2)
 
         results["3.19"] = round(self.measure_curve_to_canal("OC"), 2)
         results["3.20"] = round(self.measure_curve_to_canal("OC_Mirror"), 2)
