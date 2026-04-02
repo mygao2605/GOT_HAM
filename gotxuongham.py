@@ -3029,7 +3029,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
 
         # self.create_selected_curves()
         self.guide_bone_1_export(clearance=0.2, shell=2.0, height=18.0)
-        self.guide_bone_2_export(clearance=0.2, shell=2.0, height=18.0)
+        self.guide_L(clearance=0.2, shell=2.0)
 
         print("✅ Đã hoàn thành tạo máng ôm toàn bộ bone_1 và bone_2.")
 
@@ -3325,7 +3325,10 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             final_node.GetDisplayNode().SetColor(0.2, 0.6, 1.0) # Màu xanh dương
             
             print(f" --- XỬ LÝ XONG: {result_name} ---")
+    
 
+
+    
     def run_step_4_create_oc_mirror(self, curve_oc=None):
         # 1. LẤY DỮ LIỆU ĐẦU VÀO
         if curve_oc is None:
@@ -3406,3 +3409,130 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
 
         print(f"✅ Đã tạo thành công: {mirror_node_name}")
         return mirror_curve
+    
+
+
+    def guide_L(self,clearance=0.2, shell=2.0):
+        # 1. Cấu hình Node
+        bone_name = 'bone_2'
+        curve_1_name = 'OC_Mirror'
+        curve_2_name = 'OC_L'
+        landmark_name = 'GoL' # Điểm mốc nằm TRONG vùng muốn giữ lại
+
+        # 2. Lấy Nodes an toàn
+        bone_node = slicer.mrmlScene.GetFirstNodeByName(bone_name)
+        c1_node = slicer.mrmlScene.GetFirstNodeByName(curve_1_name)
+        c2_node = slicer.mrmlScene.GetFirstNodeByName(curve_2_name)
+        lm_node = slicer.mrmlScene.GetFirstNodeByName(landmark_name)
+
+        if not all([bone_node, c1_node, c2_node, lm_node]):
+            print("ERROR: Kiểm tra lại tên Node trong Data Panel (bone_2, OC_Mirror, OC_L, GoL).")
+            return
+
+        # --- HÀM TRUY XUẤT POLYDATA ĐƯỜNG CONG (FIX LỖI API) ---
+        def get_curve_geometry(curve_node):
+            pd = vtk.vtkPolyData()
+            # Thử các phương thức phổ biến của Markups Curve
+            if hasattr(curve_node, 'GetNavigationPolyData'):
+                curve_node.GetNavigationPolyData(pd)
+            elif hasattr(curve_node, 'GetCurvePolyData'):
+                curve_node.GetCurvePolyData(pd)
+            else:
+                # Fallback: Tự dựng từ các điểm điều khiển
+                points = vtk.vtkPoints()
+                for i in range(curve_node.GetNumberOfControlPoints()):
+                    p = [0,0,0]
+                    curve_node.GetNthControlPointPositionWorld(i, p)
+                    points.InsertNextPoint(p)
+                lines = vtk.vtkCellArray()
+                line = vtk.vtkPolyLine()
+                line.GetPointIds().SetNumberOfIds(points.GetNumberOfPoints())
+                for i in range(points.GetNumberOfPoints()):
+                    line.GetPointIds().SetId(i, i)
+                lines.InsertNextCell(line)
+                pd.SetPoints(points)
+                pd.SetLines(lines)
+            return pd
+
+        # 3. TẠO VỎ MÁNG (OFFSET TỪ XƯƠNG)
+        bone_pd = bone_node.GetPolyData()
+        imp_bone = vtk.vtkImplicitPolyDataDistance()
+        imp_bone.SetInput(bone_pd)
+        
+        bounds = [0]*6
+        bone_pd.GetBounds(bounds)
+        padded_bounds = [bounds[i] + (20 if i%2 else -20) for i in range(6)]
+        
+        sample = vtk.vtkSampleFunction()
+        sample.SetImplicitFunction(imp_bone)
+        sample.SetModelBounds(padded_bounds)
+        sample.SetSampleDimensions(150, 150, 150)
+        
+        thresh = vtk.vtkImageThreshold()
+        thresh.SetInputConnection(sample.GetOutputPort())
+        thresh.ThresholdBetween(clearance, clearance + shell)
+        thresh.SetInValue(1); thresh.SetOutValue(0)
+        thresh.SetOutputScalarTypeToUnsignedChar()
+        
+        mc = vtk.vtkDiscreteMarchingCubes()
+        mc.SetInputConnection(thresh.GetOutputPort())
+        mc.Update()
+        guide_pd = mc.GetOutput()
+
+        # 4. LOGIC CẮT KÉP (GIỮ PHẦN GIỮA)
+        p_inside = [0,0,0]
+        lm_node.GetNthControlPointPositionWorld(0, p_inside)
+
+        def clip_by_curve(input_pd, curve_node, target_point):
+            c_pd = get_curve_geometry(curve_node)
+            
+            # Extrude tạo "bức tường" cắt
+            extrude = vtk.vtkLinearExtrusionFilter()
+            extrude.SetInputData(c_pd)
+            extrude.SetExtrusionTypeToVectorExtrusion()
+            # Vector (0,0,200) giả định đường cong nằm trên mặt phẳng XY
+            extrude.SetVector(0, 0, 200) 
+            extrude.Update()
+            
+            imp = vtk.vtkImplicitPolyDataDistance()
+            imp.SetInput(extrude.GetOutput())
+            
+            clipper = vtk.vtkClipPolyData()
+            clipper.SetInputData(input_pd)
+            clipper.SetClipFunction(imp)
+            
+            # Giữ lại phía có chứa điểm Target
+            val = imp.EvaluateFunction(target_point)
+            clipper.SetInsideOut(val < 0)
+            clipper.Update()
+            return clipper.GetOutput()
+
+        print("--- Đang giới hạn bởi OC_Mirror ---")
+        pass1 = clip_by_curve(guide_pd, c1_node, p_inside)
+        
+        print("--- Đang giới hạn bởi OC_L ---")
+        pass2 = clip_by_curve(pass1, c2_node, p_inside)
+
+        # 5. LÀM MƯỢT VÀ HIỂN THỊ
+        smoother = vtk.vtkWindowedSincPolyDataFilter()
+        smoother.SetInputData(pass2)
+        smoother.SetNumberOfIterations(30)
+        smoother.BoundarySmoothingOn()
+        
+        normals = vtk.vtkPolyDataNormals()
+        normals.SetInputConnection(smoother.GetOutputPort())
+        normals.AutoOrientNormalsOn()
+        normals.Update()
+
+        # Xuất kết quả
+        res_name = "Mang_Om_Giua_2_Duong"
+        existing = slicer.mrmlScene.GetFirstNodeByName(res_name)
+        if existing: slicer.mrmlScene.RemoveNode(existing)
+
+        final_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", res_name)
+        final_node.SetAndObservePolyData(normals.GetOutput())
+        final_node.CreateDefaultDisplayNodes()
+        final_node.GetDisplayNode().SetColor(0, 0.8, 1.0) # Màu Cyan
+        
+        print(f"\n>>> HOÀN THÀNH: Máng đã ôm gọn giữa OC_Mirror và OC_L.")
+
