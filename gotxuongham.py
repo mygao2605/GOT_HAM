@@ -545,7 +545,7 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                     (["ObiL-GoL", metrics.get("3.16", "N/A"), ""], cell_fmt),
                     (["3.4. Khoảng cách từ góc hàm đến dây thần kinh", "", ""], sub_section_fmt),
                     (["GoR-Canal", metrics.get("3.17", "N/A"), ""], cell_fmt),
-                    (["GoR'-Canal", metrics.get("3.18", "N/A"), ""], cell_fmt),
+                    (["GoL-Canal", metrics.get("3.18", "N/A"), ""], cell_fmt),
                     (["3.5. Khoảng cách ngắn nhất", "", ""], sub_section_fmt),
                     (["OC-Canal", metrics.get("3.19", "N/A"), ""], cell_fmt),
                     (["OC_Mirror-Canal", metrics.get("3.20", "N/A"), ""], cell_fmt),
