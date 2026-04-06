@@ -3537,7 +3537,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         print(f"\n>>> HOÀN THÀNH: Máng đã ôm gọn giữa OC_Mirror và OC_L.")
 
 
-    def guide_R(self, clearance=0.2, shell=2.0):
+    def guide_R(self,clearance=0.2, shell=2.0):
         # 1. Cấu hình Node cho Bone 1
         bone_name = 'bone_1'
         curve_1_name = 'OC'
