@@ -294,8 +294,24 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # --- SECTION 5: GUIDE & EXPORT ---
         exportCollapsibleButton = ctk.ctkCollapsibleButton()
         exportCollapsibleButton.text = "6. Guide & Xuất file"
+
         formLayout.addRow(exportCollapsibleButton)
         exportFormLayout = qt.QFormLayout(exportCollapsibleButton)
+        # Clearance
+        self.clearanceSpinBox = qt.QDoubleSpinBox()
+        self.clearanceSpinBox.setMinimum(0.0)
+        self.clearanceSpinBox.setMaximum(10.0)
+        self.clearanceSpinBox.setSingleStep(0.1)
+        self.clearanceSpinBox.setValue(0.2)  # default
+        exportFormLayout.addRow("Clearance:", self.clearanceSpinBox)
+
+        # Shell
+        self.shellSpinBox = qt.QDoubleSpinBox()
+        self.shellSpinBox.setMinimum(0.0)
+        self.shellSpinBox.setMaximum(10.0)
+        self.shellSpinBox.setSingleStep(0.1)
+        self.shellSpinBox.setValue(2.0)  # default
+        exportFormLayout.addRow("Shell:", self.shellSpinBox)
 
         self.btnStep5 = qt.QPushButton("Tạo máng (Band Guide)")
         self.btnStep5.setStyleSheet("background-color: #ffcccc; font-weight: bold")
@@ -3027,9 +3043,11 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         """
         # Danh sách các xương cần tạo máng
 
-        # self.create_selected_curves()
-        self.guide_R(clearance=0.2, shell=2.0)
-        self.guide_L(clearance=0.2, shell=2.0)
+        clearance = self.clearanceSpinBox.value
+        shell = self.shellSpinBox.value
+
+        self.guide_R(clearance=clearance, shell=shell)
+        self.guide_L(clearance=clearance, shell=shell)
 
         print("✅ Đã hoàn thành tạo máng ôm toàn bộ bone_1 và bone_2.")
 
