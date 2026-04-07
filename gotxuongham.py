@@ -1173,15 +1173,12 @@ class gotxuonghamWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
             
-            # Cấu hình các thông số máng
-            params = {
-                "clearance": 0.2,
-                "thickness": 1.2,
-                "height": 15.0
-            }
+        
+            current_clearance = self.clearanceSpinBox.value
+            current_shell = self.shellSpinBox.value
             
             # Gọi logic tạo máng (View only)
-            self.logic.run_step_5_create_fragment_guides(params)
+            self.logic.run_step_5_create_fragment_guides(current_clearance, current_shell)
             
             qt.QMessageBox.information(None, "Thành công", "Đã tạo máng hướng dẫn (Guide). Hãy kiểm tra trên màn hình 3D trước khi xuất file.")
             
@@ -3036,16 +3033,12 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         print(f"✅ Đã tạo mặt phẳng cắt cân đối qua L và L_mirror.")
         slicer.util.selectModule("Markups")
 
-    def run_step_5_create_fragment_guides(self, params):
+    def run_step_5_create_fragment_guides(self, clearance, shell):
         """
         Tạo máng hướng dẫn ôm sát và bao phủ toàn bộ bone_1, bone_2.
         Dựa trên thuật toán Implicit Distance (Offsetting).
         """
         # Danh sách các xương cần tạo máng
-
-        clearance = self.clearanceSpinBox.value
-        shell = self.shellSpinBox.value
-
         self.guide_R(clearance=clearance, shell=shell)
         self.guide_L(clearance=clearance, shell=shell)
 
