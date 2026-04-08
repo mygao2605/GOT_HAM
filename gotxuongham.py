@@ -3514,7 +3514,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             
             # Giữ lại phía có chứa điểm Target
             val = imp.EvaluateFunction(target_point)
-            clipper.SetInsideOut(val < 0)
+            clipper.SetInsideOut(val > 0)
             clipper.Update()
             return clipper.GetOutput()
 
