@@ -1582,10 +1582,10 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         nodes = [
             "bone_1",           # Mảnh xương gọt phải
             "bone_2",
-            "Mang_R_Part_1",           # Mảnh xương gọt trái
-            "Mang_R_Part_2",
-            "Mang_L_Part_1",           # Mảnh xương gọt trái
-            "Mang_L_Part_2",
+            "Mang_R_1",           # Mảnh xương gọt trái
+            "Mang_R_2",
+            "Mang_L_1",           # Mảnh xương gọt trái
+            "Mang_L_2",
             "Final_Guide_bone_1",     # Máng hướng dẫn phải
             "Final_Guide_bone_2"      # Máng hướng dẫn trái
         ]
@@ -3106,12 +3106,9 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
 
         # 4. Chia tách và hiển thị kết quả
         # Cấu hình: (is_inside, suffix_name, color_rgb)
-        configs = [(True, "_Part_1", [0.1, 0.7, 0.1]), (False, "_Part_2", [0.7, 0.1, 0.1])]
+        configs = [(True, part1_name, [0.1, 0.7, 0.1]), (False, part2_name, [0.7, 0.1, 0.1])]
         
-        for is_inside, suffix, color in configs:
-            full_name = part1_name.split('_Part')[0] + suffix if "_Part" in part1_name else name + suffix
-            # Ở đây tôi đơn giản hóa việc đặt tên dựa trên tham số đầu vào
-            current_name = part1_name if is_inside else part2_name
+        for is_inside, current_name, color in configs:
             
             clipper = vtk.vtkClipPolyData()
             clipper.SetInputData(guide_pd)
@@ -3137,7 +3134,7 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
         bone_node.SetDisplayVisibility(0)
         print(f"✅ Đã xử lý xong bên PHẢI: {part1_name} và {part2_name}")
 
-    def create_and_split_Lguide(self,bone_name, curve_name, clearance=0.2, shell=2.0, part1_name="Part_1", part2_name="Part_2"):
+    def create_and_split_Lguide(self, bone_name, curve_name, clearance=0.2, shell=2.0, part1_name="Part_1", part2_name="Part_2"):
         # 1. Lấy Node từ Scene
         bone_node = slicer.mrmlScene.GetFirstNodeByName(bone_name)
         curve_node = slicer.mrmlScene.GetFirstNodeByName(curve_name)
