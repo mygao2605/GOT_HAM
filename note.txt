@@ -212,3 +212,91 @@ def guide_bone_1_export(self, clearance=0.2, shell=2.0, height=18.0):
             final_node.GetDisplayNode().SetColor(0.2, 0.6, 1.0) # Màu xanh dương
             
             print(f" --- XỬ LÝ XONG: {result_name} ---")
+
+
+
+import vtk
+import slicer
+
+# --- 1. LẤY CÁC NODE ĐÃ CÓ TRÊN SCENE ---
+source_guide_name = 'Mang_R'
+cutting_curve_name = 'OC_R'
+
+guide_node = slicer.mrmlScene.GetFirstNodeByName(source_guide_name)
+curve_node = slicer.mrmlScene.GetFirstNodeByName(cutting_curve_name)
+
+if not guide_node or not curve_node:
+    print(f"❌ Lỗi: Không tìm thấy node {source_guide_name} hoặc {cutting_curve_name}")
+else:
+    print(f"--- Đang cắt đôi {source_guide_name} bằng {cutting_curve_name} ---")
+    
+    # --- 2. TRUY XUẤT HÌNH HỌC ĐƯỜNG CONG (Fix lỗi Slicer mới) ---
+    curve_pd = vtk.vtkPolyData()
+    if hasattr(curve_node, 'GetCurvePolyData'):
+        curve_node.GetCurvePolyData(curve_pd)
+    else:
+        points = curve_node.GetCurvePointsWorld()
+        curve_pd.SetPoints(points)
+        lines = vtk.vtkCellArray()
+        line = vtk.vtkPolyLine()
+        line.GetPointIds().SetNumberOfIds(points.GetNumberOfPoints())
+        for i in range(points.GetNumberOfPoints()):
+            line.GetPointIds().SetId(i, i)
+        lines.InsertNextCell(line)
+        curve_pd.SetLines(lines)
+
+    # --- 3. TẠO MẶT CẮT (EXTRUSION) ---
+    # Quét đường cong theo trục Z để tạo thành một bức tường cắt
+    extrude = vtk.vtkLinearExtrusionFilter()
+    extrude.SetInputData(curve_pd)
+    extrude.SetExtrusionTypeToVectorExtrusion()
+    extrude.SetVector(0, 0, 500) # Hướng quét xuyên qua máng
+    extrude.Update()
+    
+    # Tạo hàm Implicit từ mặt phẳng vừa quét
+    clip_func = vtk.vtkImplicitPolyDataDistance()
+    clip_func.SetInput(extrude.GetOutput())
+
+    # --- 4. HÀM CẮT VÀ XUẤT NODE ĐỘC LẬP ---
+    def create_split_part(input_pd, part_name, is_inside, color):
+        clipper = vtk.vtkClipPolyData()
+        clipper.SetInputData(input_pd)
+        clipper.SetClipFunction(clip_func)
+        clipper.SetInsideOut(is_inside)
+        clipper.Update()
+        
+        # Làm mịn nhẹ mép cắt để khử răng cưa nham nhở
+        smoother = vtk.vtkWindowedSincPolyDataFilter()
+        smoother.SetInputConnection(clipper.GetOutputPort())
+        smoother.SetNumberOfIterations(50)
+        smoother.BoundarySmoothingOn() # Giúp mép cắt phẳng mượt
+        
+        normals = vtk.vtkPolyDataNormals()
+        normals.SetInputConnection(smoother.GetOutputPort())
+        normals.AutoOrientNormalsOn()
+        normals.Update()
+
+        # Tạo node mới hoặc cập nhật node cũ
+        old = slicer.mrmlScene.GetFirstNodeByName(part_name)
+        if old: slicer.mrmlScene.RemoveNode(old)
+        
+        node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", part_name)
+        node.SetAndObservePolyData(normals.GetOutput())
+        node.CreateDefaultDisplayNodes()
+        node.GetDisplayNode().SetColor(color)
+        node.GetDisplayNode().SetOpacity(1.0)
+        return node
+
+    # --- 5. THỰC THI CHIA ĐÔI ---
+    guide_pd = guide_node.GetPolyData()
+    
+    # Phần 1 (Phía "trong" so với mặt phẳng cắt)
+    create_split_part(guide_pd, "Mang_R_Part_1", True, [0.1, 0.8, 0.1]) # Xanh lá
+    
+    # Phần 2 (Phía "ngoài" so với mặt phẳng cắt)
+    create_split_part(guide_pd, "Mang_R_Part_2", False, [0.8, 0.1, 0.1]) # Đỏ
+
+    # Ẩn máng gốc để nhìn rõ 2 phần mới
+    guide_node.SetDisplayVisibility(0)
+
+    print("✅ HOÀN THÀNH: Đã chia máng thành Mang_R_Part_1 và Mang_R_Part_2")
