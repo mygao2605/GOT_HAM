@@ -1,199 +1,606 @@
-import vtk
-import slicer
-import numpy as np
-
-def guide_bone_1_export(bone_name, curve_name, cut_name, clearance=0.2, shell=2.0, height=18.0):
-    """
-    Tạo máng ôm sát xương, giới hạn bởi Curve và đạt độ cao chính xác 18mm.
-    """
-    # 1. Lấy Nodes
-    bone_node = slicer.util.getNode(bone_name)
-    curve_node = slicer.util.getNode(curve_name)
-    cut_node = slicer.util.getNode(cut_name)
-    
-    if not all([bone_node, curve_node, cut_node]):
-        print("❌ Thiếu Bone, Curve hoặc Cut node.")
+def create_and_split_Lguide_v2(
+    bone_name,
+    surface_pd, 
+    clearance=0.2,
+    shell=2.0,
+    part1_name="Part_1",
+    part2_name="Part_2"
+):
+    # ==============================
+    # 1. LẤY NODE XƯƠNG
+    # ==============================
+    bone_node = slicer.mrmlScene.GetFirstNodeByName(bone_name)
+    if not bone_node:
+        print("❌ Thiếu node xương!")
         return
 
-    # 2. Tạo vỏ Shell (Offsetting)
     bone_pd = bone_node.GetPolyData()
-    imp_bone = vtk.vtkImplicitPolyDataDistance()
-    imp_bone.SetInput(bone_pd)
-    
-    bounds = [0]*6
+
+    # ==============================
+    # 2. TẠO MÁNG (OFFSET)
+    # ==============================
+    dist = vtk.vtkImplicitPolyDataDistance()
+    dist.SetInput(bone_pd)
+
+    bounds = [0] * 6
     bone_pd.GetBounds(bounds)
-    # Thêm margin để không bị mất mesh khi voxelize
-    margin = 15.0
-    padded_bounds = [bounds[i] + (margin if i%2 else -margin) for i in range(6)]
-    
+    pad = shell + clearance + 10.0  # Tăng pad để tránh mất góc máng
+
     sample = vtk.vtkSampleFunction()
-    sample.SetImplicitFunction(imp_bone)
-    sample.SetModelBounds(padded_bounds)
+    sample.SetImplicitFunction(dist)
+    sample.SetModelBounds(
+        bounds[0] - pad, bounds[1] + pad,
+        bounds[2] - pad, bounds[3] + pad,
+        bounds[4] - pad, bounds[5] + pad
+    )
     sample.SetSampleDimensions(150, 150, 150)
-    
+
     thresh = vtk.vtkImageThreshold()
     thresh.SetInputConnection(sample.GetOutputPort())
-    # Áp dụng thông số: Clearance = 0.2, Thickness = 2.0
     thresh.ThresholdBetween(clearance, clearance + shell)
-    thresh.SetInValue(1); thresh.SetOutValue(0); thresh.SetOutputScalarTypeToUnsignedChar()
-    
+    thresh.SetInValue(1)
+    thresh.SetOutValue(0)
+    thresh.SetOutputScalarTypeToUnsignedChar()
+
     mc = vtk.vtkDiscreteMarchingCubes()
     mc.SetInputConnection(thresh.GetOutputPort())
     mc.Update()
+
     guide_pd = mc.GetOutput()
 
-    # 3. Giới hạn Chiều cao (GUIDE_HEIGHT = 18mm)
-    # Sử dụng mặt phẳng cắt của xương làm mốc gốc
-    cut_pd = cut_node.GetPolyData()
-    imp_cut = vtk.vtkImplicitPolyDataDistance()
-    imp_cut.SetInput(cut_pd)
-    
-    clipper_height = vtk.vtkClipPolyData()
-    clipper_height.SetInputData(guide_pd)
-    clipper_height.SetClipFunction(imp_cut)
-    # Cắt tại vị trí 18mm so với mặt cắt xương
-    clipper_height.SetValue(height)
-    # InsideOut=True để giữ phần từ 0 đến 18mm
-    clipper_height.SetInsideOut(True)
-    clipper_height.Update()
+    # Sửa lỗi Normals của máng thô trước khi đem đi cắt
+    guide_normals = vtk.vtkPolyDataNormals()
+    guide_normals.SetInputData(guide_pd)
+    guide_normals.AutoOrientNormalsOn()
+    guide_normals.ConsistencyOn()
+    guide_normals.Update()
+    guide_pd_clean = guide_normals.GetOutput()
 
-    # 4. Giới hạn bởi Curve (Biên ngang)
-    curve_pd = curve_node.GetPolyData()
-    extrude = vtk.vtkLinearExtrusionFilter()
-    extrude.SetInputData(curve_pd)
-    extrude.SetExtrusionTypeToVectorExtrusion()
-    # Kéo dài "bức tường" cắt (điều chỉnh vector nếu hướng xương khác)
-    extrude.SetVector(0, 0, 150) 
-    extrude.Update()
+    # ==============================
+    # 3. CHUẨN HÓA MẶT CẮT (NORMALS)
+    # ==============================
+    surface_normals = vtk.vtkPolyDataNormals()
+    surface_normals.SetInputData(surface_pd)
+    surface_normals.AutoOrientNormalsOn()
+    surface_normals.ConsistencyOn()
+    surface_normals.Update()
+    surface_pd_clean = surface_normals.GetOutput()
 
-    imp_curve = vtk.vtkImplicitPolyDataDistance()
-    imp_curve.SetInput(extrude.GetOutput())
-    
-    clipper_curve = vtk.vtkClipPolyData()
-    clipper_curve.SetInputData(clipper_height.GetOutput())
-    clipper_curve.SetClipFunction(imp_curve)
-    clipper_curve.SetInsideOut(True) 
-    clipper_curve.Update()
+    # Thiết lập hàm khoảng cách từ mặt cắt
+    clip_func = vtk.vtkImplicitPolyDataDistance()
+    clip_func.SetInput(surface_pd_clean)
 
-    # 5. Hiển thị kết quả
-    result_name = f"Final_Guide_{bone_name}"
-    try: slicer.mrmlScene.RemoveNode(slicer.util.getNode(result_name))
-    except: pass
-    
-    model_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", result_name)
-    model_node.SetAndObservePolyData(clipper_curve.GetOutput())
-    model_node.CreateDefaultDisplayNodes()
-    
-    dn = model_node.GetDisplayNode()
-    dn.SetColor(0.2, 0.9, 0.5) # Màu xanh lá y tế
-    dn.SetOpacity(1.0)
-    
-    print(f"✅ Đã tạo máng: Clearance={clearance}mm, Shell={shell}mm, Height={height}mm")
+    # ==============================
+    # 4. TIẾN HÀNH CLIP (CẮT ĐÔI MÁNG)
+    # ==============================
+    configs = [
+        (True, part1_name, [0, 1, 0]),  # Phần 1: Màu xanh lá (Inside)
+        (False, part2_name, [1, 0, 0])  # Phần 2: Màu đỏ (Outside)
+    ]
 
-# --- CHẠY LỆNH ---
-# Giả sử mặt phẳng cắt tên là 'cut_1'
-test_create_precise_guide('bone_1', 'Curve_bone_1_Me_GoR', 'cut_1', clearance=0.2, shell=2.0, height=18.0)
+    for inside, name, color in configs:
+        clipper = vtk.vtkClipPolyData()
+        clipper.SetInputData(guide_pd_clean)
+        clipper.SetClipFunction(clip_func)
+        clipper.SetInsideOut(inside)
+        clipper.Update()
 
+        # Kiểm tra nếu kết quả cắt bị rỗng (mặt cắt không chạm máng)
+        clipped_poly = clipper.GetOutput()
+        if clipped_poly.GetNumberOfPoints() == 0:
+            print(f"⚠️ Cảnh báo: Phần cắt '{name}' bị rỗng. Hãy kiểm tra lại xem mặt cắt đã đâm xuyên qua máng chưa.")
+
+        # Làm mịn vết cắt
+        smooth = vtk.vtkWindowedSincPolyDataFilter()
+        smooth.SetInputConnection(clipper.GetOutputPort())
+        smooth.SetNumberOfIterations(20)
+        smooth.BoundarySmoothingOn()  # Giữ nguyên đường biên vết cắt không bị co rút
+
+        # Tạo lại vector pháp tuyến cho máng sau khi đã làm mịn
+        final_normals = vtk.vtkPolyDataNormals()
+        final_normals.SetInputConnection(smooth.GetOutputPort())
+        final_normals.AutoOrientNormalsOn()
+        final_normals.ConsistencyOn()
+        final_normals.Update()
+
+        # Hiển thị hoặc cập nhật Model Node trong Scene
+        old = slicer.mrmlScene.GetFirstNodeByName(name)
+        if old:
+            slicer.mrmlScene.RemoveNode(old)
+
+        node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", name)
+        node.SetAndObservePolyData(final_normals.GetOutput())
+        node.CreateDefaultDisplayNodes()
+        node.GetDisplayNode().SetColor(color)
+
+    bone_node.SetDisplayVisibility(0)
+    print("🎯 DONE: Đã sửa lỗi và hoàn thành phân tách máng!")
 
 
 import vtk
 import slicer
 import numpy as np
 
-def guide_bone_2_export():
-    # --- THIẾT LẬP HẰNG SỐ ---
-    CLEARANCE_MM = 0.2
-    SHELL_MM     = 2.0
-    GUIDE_HEIGHT = 18.0
+def extend_curve_node(curve_name, extend_len=30.0, output_curve_name="OC_L_Extended"):
+    """
+    Lấy đường cong gốc, nội suy lấy danh sách điểm chuẩn, 
+    kéo dài 2 đầu mút và tạo một Markups Curve Node mới ổn định trong Scene.
+    """
+    # 1. Lấy Node đường cong gốc
+    curve_node = slicer.mrmlScene.GetFirstNodeByName(curve_name)
+    if not curve_node:
+        print(f"❌ Không tìm thấy đường cong: {curve_name}")
+        return None
+
+    # Lấy các điểm nội suy thực tế dọc theo đường cong (World coordinate)
+    curve_pts = curve_node.GetCurvePointsWorld()
+    num_pts = curve_pts.GetNumberOfPoints()
+
+    if num_pts < 2:
+        print("❌ Đường cong không đủ điểm để tính toán tiếp tuyến.")
+        return None
+
+    # 2. Tính toán vị trí kéo dài tại 2 đầu mút
+    p0 = np.array(curve_pts.GetPoint(0))
+    p1 = np.array(curve_pts.GetPoint(1))
+    pn = np.array(curve_pts.GetPoint(num_pts - 1))
+    pn_1 = np.array(curve_pts.GetPoint(num_pts - 2))
+
+    # Tính toán vector hướng tiếp tuyến (normalized)
+    dir_start = (p0 - p1) / np.linalg.norm(p0 - p1)
+    dir_end = (pn - pn_1) / np.linalg.norm(pn - pn_1)
+
+    # Điểm mới sau khi kéo dài
+    extended_start = p0 + dir_start * extend_len
+    extended_end = pn + dir_end * extend_len
+
+    # 3. Tạo Node Markups Curve mới trong Slicer
+    extended_node = slicer.mrmlScene.GetFirstNodeByName(output_curve_name)
+    if extended_node:
+        slicer.mrmlScene.RemoveNode(extended_node)
+
+    extended_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsCurveNode", output_curve_name)
+    extended_node.CreateDefaultDisplayNodes()
+
+    # Khóa tương tác kéo thả điểm để giữ nguyên hình dạng hình học vừa tính toán
+    extended_node.SetLocked(True)
+
+    # 4. Đưa danh sách điểm (gồm 2 điểm kéo dài mới) vào Node mới
+    # Thêm điểm kéo dài đầu tiên
+    extended_node.AddControlPoint(extended_start)
     
-    config = [
-        ('bone_2', 'Curve_bone_2_Me_GoL', 'cut_2', 'GoL')
+    # Thêm các điểm mút trung gian từ đường cong cũ để giữ nguyên quỹ đạo đường cong
+    # Để tránh đường cong bị quá răng cưa hoặc quá dày điểm, ta lấy các điểm điều khiển (Control Points) gốc
+    num_control_pts = curve_node.GetNumberOfControlPoints()
+    for i in range(num_control_pts):
+        pos = [0, 0, 0]
+        curve_node.GetNthControlPointPositionWorld(i, pos)
+        extended_node.AddControlPoint(pos)
+
+    # Thêm điểm kéo dài cuối cùng
+    extended_node.AddControlPoint(extended_end)
+
+    # Đổi màu đường cong sang màu vàng (Yellow) để dễ kiểm tra trực quan trên màn hình
+    extended_node.GetDisplayNode().SetSelectedColor(1, 1, 0)
+    extended_node.GetDisplayNode().SetGlyphScale(1.0) # Thu nhỏ các điểm mút cho đỡ rối mắt
+    
+    print(f"✔️ Đã sửa lỗi và tạo thành công đường cong kéo dài: {output_curve_name}")
+    return extended_node
+
+def create_cut_surface(extended_curve_node, surface_name="CutSurface"):
+    """
+    Dựng mặt phẳng cắt từ đường cong đã được kéo dài trước đó.
+    """
+    if not extended_curve_node:
+        print("❌ Thiếu dữ liệu đường cong đầu vào.")
+        return None
+
+    # Lấy các điểm mượt mà dọc đường cong
+    pts = extended_curve_node.GetCurvePointsWorld()
+    
+    curve_pd = vtk.vtkPolyData()
+    curve_pd.SetPoints(pts)
+
+    lines = vtk.vtkCellArray()
+    polyline = vtk.vtkPolyLine()
+    polyline.GetPointIds().SetNumberOfIds(pts.GetNumberOfPoints())
+    for i in range(pts.GetNumberOfPoints()):
+        polyline.GetPointIds().SetId(i, i)
+    lines.InsertNextCell(polyline)
+    curve_pd.SetLines(lines)
+
+    # Tạo dịch chuyển Z lên và xuống (Extrusion)
+    tf_up = vtk.vtkTransform()
+    tf_up.Translate(0, 0, 100)
+
+    tf_down = vtk.vtkTransform()
+    tf_down.Translate(0, 0, -100)
+
+    up_f = vtk.vtkTransformPolyDataFilter()
+    up_f.SetInputData(curve_pd)
+    up_f.SetTransform(tf_up)
+    up_f.Update()
+
+    down_f = vtk.vtkTransformPolyDataFilter()
+    down_f.SetInputData(curve_pd)
+    down_f.SetTransform(tf_down)
+    down_f.Update()
+
+    up_pd = up_f.GetOutput()
+    down_pd = down_f.GetOutput()
+
+    # Đảm bảo 2 biên chạy cùng hướng
+    def ensure_same_direction(pd1, pd2):
+        p1_start = np.array(pd1.GetPoint(0))
+        p2_start = np.array(pd2.GetPoint(0))
+        p2_end = np.array(pd2.GetPoint(pd2.GetNumberOfPoints() - 1))
+
+        if np.linalg.norm(p1_start - p2_start) > np.linalg.norm(p1_start - p2_end):
+            reverse = vtk.vtkReverseSense()
+            reverse.SetInputData(pd2)
+            reverse.ReverseCellsOn()
+            reverse.Update()
+            return reverse.GetOutput()
+        return pd2
+
+    down_pd = ensure_same_direction(up_pd, down_pd)
+
+    # Ghép dữ liệu và tạo bề mặt liên tục
+    append = vtk.vtkAppendPolyData()
+    append.AddInputData(up_pd)
+    append.AddInputData(down_pd)
+    append.Update()
+
+    strip = vtk.vtkStripper()
+    strip.SetInputConnection(append.GetOutputPort())
+    strip.Update()
+
+    ruled = vtk.vtkRuledSurfaceFilter()
+    ruled.SetInputConnection(strip.GetOutputPort())
+    ruled.SetRuledModeToResample()
+    ruled.SetResolution(200, 50)
+    ruled.Update()
+
+    surface_pd = ruled.GetOutput()
+
+    # Hiển thị lên Slicer
+    old_surface = slicer.mrmlScene.GetFirstNodeByName(surface_name)
+    if old_surface:
+        slicer.mrmlScene.RemoveNode(old_surface)
+
+    surface_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", surface_name)
+    surface_node.SetAndObservePolyData(surface_pd)
+    surface_node.CreateDefaultDisplayNodes()
+
+    display = surface_node.GetDisplayNode()
+    display.SetColor(0.2, 0.6, 1.0) # Màu xanh lam sáng
+    display.SetOpacity(0.4)         # Độ trong suốt 40%
+
+    print(f"✔️ Đã tạo xong mặt phẳng cắt: {surface_name}")
+    return surface_pd
+import vtk
+import slicer
+import numpy as np
+
+def extend_curve_node(curve_name, extend_len=30.0, output_curve_name="Curve_Extended"):
+    """
+    Lấy đường cong gốc, nội suy lấy danh sách điểm chuẩn, 
+    kéo dài 2 đầu mút và tạo một Markups Curve Node mới ổn định trong Scene.
+    """
+    # 1. Lấy Node đường cong gốc
+    curve_node = slicer.mrmlScene.GetFirstNodeByName(curve_name)
+    if not curve_node:
+        print(f"❌ Không tìm thấy đường cong: {curve_name}")
+        return None
+
+    # Lấy các điểm nội suy thực tế dọc theo đường cong (World coordinate)
+    curve_pts = curve_node.GetCurvePointsWorld()
+    num_pts = curve_pts.GetNumberOfPoints()
+
+    if num_pts < 2:
+        print(f"❌ Đường cong {curve_name} không đủ điểm để tính toán tiếp tuyến.")
+        return None
+
+    # 2. Tính toán vị trí kéo dài tại 2 đầu mút
+    p0 = np.array(curve_pts.GetPoint(0))
+    p1 = np.array(curve_pts.GetPoint(1))
+    pn = np.array(curve_pts.GetPoint(num_pts - 1))
+    pn_1 = np.array(curve_pts.GetPoint(num_pts - 2))
+
+    # Tính toán vector hướng tiếp tuyến (normalized)
+    dir_start = (p0 - p1) / np.linalg.norm(p0 - p1)
+    dir_end = (pn - pn_1) / np.linalg.norm(pn - pn_1)
+
+    # Điểm mới sau khi kéo dài
+    extended_start = p0 + dir_start * extend_len
+    extended_end = pn + dir_end * extend_len
+
+    # 3. Tạo Node Markups Curve mới trong Slicer
+    extended_node = slicer.mrmlScene.GetFirstNodeByName(output_curve_name)
+    if extended_node:
+        slicer.mrmlScene.RemoveNode(extended_node)
+
+    extended_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsCurveNode", output_curve_name)
+    extended_node.CreateDefaultDisplayNodes()
+
+    # Khóa tương tác kéo thả điểm để giữ nguyên hình dạng hình học vừa tính toán
+    extended_node.SetLocked(True)
+
+    # 4. Đưa danh sách điểm (gồm 2 điểm kéo dài mới) vào Node mới
+    extended_node.AddControlPoint(extended_start)
+    
+    num_control_pts = curve_node.GetNumberOfControlPoints()
+    for i in range(num_control_pts):
+        pos = [0, 0, 0]
+        curve_node.GetNthControlPointPositionWorld(i, pos)
+        extended_node.AddControlPoint(pos)
+
+    extended_node.AddControlPoint(extended_end)
+
+    # Đổi màu đường cong sang màu vàng (Yellow) để dễ kiểm tra trực quan
+    extended_node.GetDisplayNode().SetSelectedColor(1, 1, 0)
+    extended_node.GetDisplayNode().SetGlyphScale(1.0) 
+    
+    print(f"✔️ Đã tạo thành công đường cong kéo dài: {output_curve_name}")
+    return extended_node
+
+
+def create_cut_surface(extended_curve_node, surface_name="CutSurface"):
+    """
+    Dựng mặt phẳng cắt từ đường cong đã được kéo dài trước đó.
+    """
+    if not extended_curve_node:
+        print("❌ Thiếu dữ liệu đường cong đầu vào để dựng mặt cắt.")
+        return None
+
+    pts = extended_curve_node.GetCurvePointsWorld()
+    
+    curve_pd = vtk.vtkPolyData()
+    curve_pd.SetPoints(pts)
+
+    lines = vtk.vtkCellArray()
+    polyline = vtk.vtkPolyLine()
+    polyline.GetPointIds().SetNumberOfIds(pts.GetNumberOfPoints())
+    for i in range(pts.GetNumberOfPoints()):
+        polyline.GetPointIds().SetId(i, i)
+    lines.InsertNextCell(polyline)
+    curve_pd.SetLines(lines)
+
+    # Tạo dịch chuyển Z lên và xuống (Extrusion)
+    tf_up = vtk.vtkTransform()
+    tf_up.Translate(0, 0, 100)
+
+    tf_down = vtk.vtkTransform()
+    tf_down.Translate(0, 0, -100)
+
+    up_f = vtk.vtkTransformPolyDataFilter()
+    up_f.SetInputData(curve_pd)
+    up_f.SetTransform(tf_up)
+    up_f.Update()
+
+    down_f = vtk.vtkTransformPolyDataFilter()
+    down_f.SetInputData(curve_pd)
+    down_f.SetTransform(tf_down)
+    down_f.Update()
+
+    up_pd = up_f.GetOutput()
+    down_pd = down_f.GetOutput()
+
+    def ensure_same_direction(pd1, pd2):
+        p1_start = np.array(pd1.GetPoint(0))
+        p2_start = np.array(pd2.GetPoint(0))
+        p2_end = np.array(pd2.GetPoint(pd2.GetNumberOfPoints() - 1))
+
+        if np.linalg.norm(p1_start - p2_start) > np.linalg.norm(p1_start - p2_end):
+            reverse = vtk.vtkReverseSense()
+            reverse.SetInputData(pd2)
+            reverse.ReverseCellsOn()
+            reverse.Update()
+            return reverse.GetOutput()
+        return pd2
+
+    down_pd = ensure_same_direction(up_pd, down_pd)
+
+    # Ghép dữ liệu và tạo bề mặt liên tục
+    append = vtk.vtkAppendPolyData()
+    append.AddInputData(up_pd)
+    append.AddInputData(down_pd)
+    append.Update()
+
+    strip = vtk.vtkStripper()
+    strip.SetInputConnection(append.GetOutputPort())
+    strip.Update()
+
+    ruled = vtk.vtkRuledSurfaceFilter()
+    ruled.SetInputConnection(strip.GetOutputPort())
+    ruled.SetRuledModeToResample()
+    ruled.SetResolution(200, 50)
+    ruled.Update()
+
+    surface_pd = ruled.GetOutput()
+
+    # Hiển thị lên Slicer
+    old_surface = slicer.mrmlScene.GetFirstNodeByName(surface_name)
+    if old_surface:
+        slicer.mrmlScene.RemoveNode(old_surface)
+
+    surface_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", surface_name)
+    surface_node.SetAndObservePolyData(surface_pd)
+    surface_node.CreateDefaultDisplayNodes()
+
+    display = surface_node.GetDisplayNode()
+    display.SetColor(0.2, 0.6, 1.0) # Màu xanh lam sáng
+    display.SetOpacity(0.4)         # Độ trong suốt 40%
+
+    print(f"✔️ Đã tạo xong mặt phẳng cắt: {surface_name}")
+    return surface_pd
+
+
+def create_and_split_guide(
+    bone_name,
+    surface_pd, 
+    clearance=0.2,
+    shell=2.0,
+    part1_name="Part_1",
+    part2_name="Part_2"
+):
+    """
+    Tạo máng ôm xương (Offset) và dùng mặt cắt (surface_pd) để chia đôi máng.
+    """
+    # 1. LẤY NODE XƯƠNG
+    bone_node = slicer.mrmlScene.GetFirstNodeByName(bone_name)
+    if not bone_node:
+        print(f"❌ Thiếu node xương: {bone_name}!")
+        return
+
+    bone_pd = bone_node.GetPolyData()
+
+    # 2. TẠO MÁNG (OFFSET)
+    dist = vtk.vtkImplicitPolyDataDistance()
+    dist.SetInput(bone_pd)
+
+    bounds = [0] * 6
+    bone_pd.GetBounds(bounds)
+    pad = shell + clearance + 10.0  # Pad rộng ra để tránh mất góc máng
+
+    sample = vtk.vtkSampleFunction()
+    sample.SetImplicitFunction(dist)
+    sample.SetModelBounds(
+        bounds[0] - pad, bounds[1] + pad,
+        bounds[2] - pad, bounds[3] + pad,
+        bounds[4] - pad, bounds[5] + pad
+    )
+    sample.SetSampleDimensions(150, 150, 150)
+
+    thresh = vtk.vtkImageThreshold()
+    thresh.SetInputConnection(sample.GetOutputPort())
+    thresh.ThresholdBetween(clearance, clearance + shell)
+    thresh.SetInValue(1)
+    thresh.SetOutValue(0)
+    thresh.SetOutputScalarTypeToUnsignedChar()
+
+    mc = vtk.vtkDiscreteMarchingCubes()
+    mc.SetInputConnection(thresh.GetOutputPort())
+    mc.Update()
+
+    guide_pd = mc.GetOutput()
+
+    # Sửa lỗi Normals của máng thô trước khi đem đi cắt
+    guide_normals = vtk.vtkPolyDataNormals()
+    guide_normals.SetInputData(guide_pd)
+    guide_normals.AutoOrientNormalsOn()
+    guide_normals.ConsistencyOn()
+    guide_normals.Update()
+    guide_pd_clean = guide_normals.GetOutput()
+
+    # 3. CHUẨN HÓA MẶT CẮT (NORMALS)
+    surface_normals = vtk.vtkPolyDataNormals()
+    surface_normals.SetInputData(surface_pd)
+    surface_normals.AutoOrientNormalsOn()
+    surface_normals.ConsistencyOn()
+    surface_normals.Update()
+    surface_pd_clean = surface_normals.GetOutput()
+
+    # Thiết lập hàm khoảng cách từ mặt cắt
+    clip_func = vtk.vtkImplicitPolyDataDistance()
+    clip_func.SetInput(surface_pd_clean)
+
+    # 4. TIẾN HÀNH CLIP (CẮT ĐÔI MÁNG)
+    configs = [
+        (True, part1_name, [0, 1, 0]),  # Phần 1: Màu xanh lá (Inside)
+        (False, part2_name, [1, 0, 0])  # Phần 2: Màu đỏ (Outside)
     ]
-    
-    for bone_name, curve_name, cut_name, landmark_name in config:
-        print(f"--- Đang xử lý: {bone_name} ---")
-        bone_node = slicer.util.getNode(bone_name)
-        curve_node = slicer.util.getNode(curve_name)
-        cut_node = slicer.util.getNode(cut_name)
-        landmark_node = slicer.util.getNode(landmark_name)
-        
-        if not all([bone_node, curve_node, cut_node, landmark_node]):
-            continue
 
-        # 1. Tạo vỏ Shell ôm sát
-        bone_pd = bone_node.GetPolyData()
-        imp_bone = vtk.vtkImplicitPolyDataDistance()
-        imp_bone.SetInput(bone_pd)
-        
-        bounds = [0]*6
-        bone_pd.GetBounds(bounds)
-        margin = 20.0
-        padded_bounds = [bounds[i] + (margin if i%2 else -margin) for i in range(6)]
-        
-        sample = vtk.vtkSampleFunction()
-        sample.SetImplicitFunction(imp_bone)
-        sample.SetModelBounds(padded_bounds)
-        sample.SetSampleDimensions(150, 150, 150)
-        
-        thresh = vtk.vtkImageThreshold()
-        thresh.SetInputConnection(sample.GetOutputPort())
-        thresh.ThresholdBetween(CLEARANCE_MM, CLEARANCE_MM + SHELL_MM)
-        thresh.SetInValue(1); thresh.SetOutValue(0); thresh.SetOutputScalarTypeToUnsignedChar()
-        
-        mc = vtk.vtkDiscreteMarchingCubes()
-        mc.SetInputConnection(thresh.GetOutputPort())
-        mc.Update()
-        guide_pd = mc.GetOutput()
+    for inside, name, color in configs:
+        clipper = vtk.vtkClipPolyData()
+        clipper.SetInputData(guide_pd_clean)
+        clipper.SetClipFunction(clip_func)
+        clipper.SetInsideOut(inside)
+        clipper.Update()
 
-        # 2. Gọt mặt trên (Bỏ khoanh đỏ) - Dùng Landmark để định hướng
-        p_lm = [0,0,0]
-        landmark_node.GetNthControlPointPositionWorld(0, p_lm)
-        
-        imp_cut = vtk.vtkImplicitPolyDataDistance()
-        imp_cut.SetInput(cut_node.GetPolyData())
-        
-        # Cắt tại vị trí 18mm
-        clipper_h = vtk.vtkClipPolyData()
-        clipper_h.SetInputData(guide_pd)
-        clipper_h.SetClipFunction(imp_cut)
-        clipper_h.SetValue(GUIDE_HEIGHT)
-        
-        # Tự động xác định hướng giữ lại dựa trên Landmark
-        dist_lm = imp_cut.EvaluateFunction(p_lm)
-        clipper_h.SetInsideOut(dist_lm < GUIDE_HEIGHT) 
-        clipper_h.Update()
+        # Kiểm tra nếu kết quả cắt bị rỗng
+        clipped_poly = clipper.GetOutput()
+        if clipped_poly.GetNumberOfPoints() == 0:
+            print(f"⚠️ Cảnh báo: Phần cắt '{name}' bị rỗng. Hãy kiểm tra lại mặt cắt.")
 
-        # 3. Cắt theo đường cong (Sửa lỗi lấy nhầm bên)
-        curve_pd = curve_node.GetPolyData()
-        extrude = vtk.vtkLinearExtrusionFilter()
-        extrude.SetInputData(curve_pd)
-        extrude.SetExtrusionTypeToVectorExtrusion()
-        extrude.SetVector(0, 0, 100) 
-        extrude.Update()
+        # Làm mịn vết cắt
+        smooth = vtk.vtkWindowedSincPolyDataFilter()
+        smooth.SetInputConnection(clipper.GetOutputPort())
+        smooth.SetNumberOfIterations(20)
+        smooth.BoundarySmoothingOn()  # Giữ nguyên biên đường cắt
 
-        imp_curve = vtk.vtkImplicitPolyDataDistance()
-        imp_curve.SetInput(extrude.GetOutput())
-        
-        clipper_c = vtk.vtkClipPolyData()
-        clipper_c.SetInputData(clipper_h.GetOutput())
-        clipper_c.SetClipFunction(imp_curve)
-        
-        # KIỂM TRA HƯỚNG: Giữ phần chứa Landmark
-        val_lm_curve = imp_curve.EvaluateFunction(p_lm)
-        clipper_c.SetInsideOut(val_lm_curve < 0)
-        clipper_c.Update()
+        # Tạo lại vector pháp tuyến cho máng sau khi làm mịn
+        final_normals = vtk.vtkPolyDataNormals()
+        final_normals.SetInputConnection(smooth.GetOutputPort())
+        final_normals.AutoOrientNormalsOn()
+        final_normals.ConsistencyOn()
+        final_normals.Update()
 
-        # 4. Hiển thị kết quả
-        result_name = f"Final_Guide_{bone_name}"
-        try: slicer.mrmlScene.RemoveNode(slicer.util.getNode(result_name))
-        except: pass
-        
-        final_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", result_name)
-        final_node.SetAndObservePolyData(clipper_c.GetOutput())
-        final_node.CreateDefaultDisplayNodes()
-        
-        dn = final_node.GetDisplayNode()
-        dn.SetColor(0.5, 0.1, 0.7) if 'bone_1' in bone_name else dn.SetColor(0.1, 0.6, 0.8)
-        dn.SetOpacity(1.0)
+        # Hiển thị hoặc cập nhật Model Node trong Scene
+        old = slicer.mrmlScene.GetFirstNodeByName(name)
+        if old:
+            slicer.mrmlScene.RemoveNode(old)
 
-run_step_5_create_dual_guides_final()
+        node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", name)
+        node.SetAndObservePolyData(final_normals.GetOutput())
+        node.CreateDefaultDisplayNodes()
+        node.GetDisplayNode().SetColor(color)
+
+    bone_node.SetDisplayVisibility(0)
+    print(f"🎯 DONE: Đã tạo và phân tách thành công máng cho {bone_name}!")
+
+
+# ==============================================================
+# QUY TRÌNH CHO BÊN PHẢI (RIGHT - R)
+# ==============================================================
+
+# Bước 1: Kéo dài đường cong OC_R gốc ra mỗi đầu 50mm
+extended_curve_R = extend_curve_node(
+    curve_name="OC_R", 
+    extend_len=50.0, 
+    output_curve_name="OC_R_Extended"
+)
+
+# Bước 2: Tạo mặt phẳng cắt dựng từ đường cong R đã kéo dài
+if extended_curve_R:
+    cut_surface_R_pd = create_cut_surface(
+        extended_curve_node=extended_curve_R, 
+        surface_name="Mat_Phang_Cat_R"
+    )
+
+# Bước 3: Tạo máng và cắt đôi máng bên phải
+if cut_surface_R_pd:
+    create_and_split_guide(
+        bone_name="bone_R_pd",
+        surface_pd=cut_surface_R_pd,
+        clearance=0.2,
+        shell=2.0,
+        part1_name="Mang_R_1",
+        part2_name="Mang_R_2"
+    )
+
+
+# 1. Kéo dài đường cong OC_L (Kéo dài hẳn ra 50mm để chắc chắn bao hết máng)
+extended_curve = extend_curve_node(
+    curve_name="OC_L", 
+    extend_len=50.0, 
+    output_curve_name="OC_L_Extended"
+)
+
+# 2. Tạo mặt phẳng cắt từ đường cong đã kéo dài
+if extended_curve:
+    cut_surface_pd = create_cut_surface(
+        extended_curve_node=extended_curve, 
+        surface_name="Mat_Phang_Cat_L"
+    )
+
+# 3. Tiến hành tạo máng và cắt đôi
+if cut_surface_pd:
+    create_and_split_Lguide_v2(
+        bone_name="bone_L_pd",
+        surface_pd=cut_surface_pd,
+        clearance=0.2,
+        shell=2.0,
+        part1_name="Mang_L_1",
+        part2_name="Mang_L_2"
+    )
