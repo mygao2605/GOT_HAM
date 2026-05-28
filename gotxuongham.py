@@ -3581,4 +3581,4 @@ class gotxuonghamLogic(ScriptedLoadableModuleLogic):
             node.GetDisplayNode().SetColor(color)
 
         bone_node.SetDisplayVisibility(0)
-        print(f"🎯 DONE: Đã tạo và phân tách thành công máng cho {bone_name}!")
+        print(f"🎯 DONE: Đã tạo và  thành công máng cho {bone_name}!")
